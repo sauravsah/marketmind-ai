@@ -1,7 +1,7 @@
-import { researchMarket } from '../js/services/research.js';
-import { analyzeAudience } from '../js/services/audience.js';
-import { identifyOpportunities } from '../js/services/opportunity.js';
-import { generateCampaignStrategy } from '../js/services/campaign.js';
+import { researchMarket } from './js/services/research.js';
+import { analyzeAudience } from './js/services/audience.js';
+import { identifyOpportunities } from './js/services/opportunity.js';
+import { generateCampaignStrategy } from './js/services/campaign.js';
 import { getInternalProviderConfig, getPublicRuntimeConfig } from './config.mjs';
 import { authenticateFirebaseRequest } from './firebase-auth.mjs';
 
