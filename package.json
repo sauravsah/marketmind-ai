@@ -1,0 +1,16 @@
+{
+  "name": "marketmind-ai",
+  "version": "0.5.1",
+  "private": true,
+  "description": "MarketMind AI marketing intelligence workspace",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "test": "node --test",
+    "lint": "node scripts/check.mjs",
+    "typecheck": "node scripts/check.mjs",
+    "build": "node scripts/check.mjs && node scripts/build-worker.mjs",
+    "build:worker": "node scripts/build-worker.mjs"
+  }
+}
