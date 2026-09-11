@@ -124,7 +124,7 @@ function loadingPage() {
 }
 
 function publicHeader() {
-  return `<header class="public-header"><a class="public-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a><nav class="public-nav" aria-label="Public navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></nav><div class="public-actions"><button class="button button-ghost" type="button" data-route="sign-in">Sign in</button><button class="button button-primary" type="button" data-route="sign-up">Get started ${icon('arrow', 15)}</button></div></header>`;
+  return `<header class="public-header"><a class="public-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a><nav class="public-nav" aria-label="Public navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></nav><button class="public-nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="public-mobile-nav" data-action="toggle-public-nav"><span></span><span></span><span></span></button><div class="public-nav-panel" id="public-mobile-nav" aria-label="Mobile navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></div><div class="public-actions"><button class="button button-ghost" type="button" data-route="sign-in">Sign in</button><button class="button button-primary" type="button" data-route="sign-up">Get started ${icon('arrow', 15)}</button></div></header>`;
 }
 
 function landingPage() {
@@ -280,6 +280,12 @@ function attachPublicEvents() {
     if (element.tagName === 'A') event.preventDefault();
     navigate(element.dataset.route);
   }));
+  document.querySelectorAll('[data-action="toggle-public-nav"]').forEach((element) => element.addEventListener('click', () => {
+    const isOpen = document.body.classList.toggle('public-nav-open');
+    element.setAttribute('aria-expanded', String(isOpen));
+    element.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation');
+  }));
+  document.querySelectorAll('.public-nav-panel a').forEach((element) => element.addEventListener('click', () => document.body.classList.remove('public-nav-open')));
   document.querySelector('#auth-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
