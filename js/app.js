@@ -276,6 +276,26 @@ function attachMigrationEvents() {
 }
 
 function attachPublicEvents() {
+  const landing = document.querySelector('.landing-page');
+  if (landing && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    landing.classList.add('motion-ready');
+    const revealables = landing.querySelectorAll('.landing-intro, .workflow-card, .capabilities-section, .capability-card, .evidence-section, .landing-preview, .landing-cta');
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+      revealables.forEach((element) => {
+        element.classList.add('motion-reveal');
+        observer.observe(element);
+      });
+    } else {
+      revealables.forEach((element) => element.classList.add('is-visible'));
+    }
+  }
   document.querySelectorAll('[data-route]').forEach((element) => element.addEventListener('click', (event) => {
     if (element.tagName === 'A') event.preventDefault();
     navigate(element.dataset.route);

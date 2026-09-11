@@ -1211,3 +1211,103 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     order: 3;
   }
 }
+
+/* Landing motion — restrained, purposeful, and reduced-motion friendly. */
+@keyframes landing-fade-up {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes landing-fade-down {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes landing-scale-in {
+  from { opacity: 0; transform: scale(.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes landing-orbit {
+  from { transform: rotate(-20deg); }
+  to { transform: rotate(340deg); }
+}
+
+@keyframes landing-orbit-reverse {
+  from { transform: rotate(60deg); }
+  to { transform: rotate(-300deg); }
+}
+
+@keyframes landing-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -8px, 0); }
+}
+
+@keyframes landing-shimmer {
+  0%, 74%, 100% { transform: translateX(-135%); }
+  87% { transform: translateX(135%); }
+}
+
+.landing-page [id] { scroll-margin-top: 96px; }
+.landing-page .public-header { animation: landing-fade-down .65s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-hero-copy > .eyebrow { animation: landing-fade-up .7s .08s both; }
+.landing-hero-copy > h1 { animation: landing-fade-up .8s .16s both; }
+.landing-hero-copy > p { animation: landing-fade-up .75s .28s both; }
+.landing-hero-actions { animation: landing-fade-up .75s .4s both; }
+.landing-proof-line { animation: landing-fade-up .75s .52s both; }
+.landing-hero-visual { animation: landing-scale-in 1s .16s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-hero-visual .ring-large { animation: landing-orbit 28s linear infinite; }
+.landing-hero-visual .ring-small { animation: landing-orbit-reverse 22s linear infinite; }
+.landing-hero-visual .visual-chip-top { animation: landing-float 5.4s 1s ease-in-out infinite; }
+.landing-hero-visual .visual-chip-right { animation: landing-float 6.2s 1.35s ease-in-out infinite; }
+.landing-hero-visual .visual-chip-bottom { animation: landing-float 5.8s 1.7s ease-in-out infinite; }
+
+.landing-page.motion-ready .motion-reveal {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+}
+
+.landing-page.motion-ready .motion-reveal.is-visible {
+  animation: landing-fade-up .8s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.landing-page.motion-ready .workflow-card.is-visible:nth-child(2),
+.landing-page.motion-ready .capability-card.is-visible:nth-child(2) { animation-delay: .08s; }
+.landing-page.motion-ready .workflow-card.is-visible:nth-child(3),
+.landing-page.motion-ready .capability-card.is-visible:nth-child(3) { animation-delay: .16s; }
+.landing-page.motion-ready .workflow-card.is-visible:nth-child(4),
+.landing-page.motion-ready .capability-card.is-visible:nth-child(4) { animation-delay: .24s; }
+.landing-page.motion-ready .workflow-card.is-visible:nth-child(5) { animation-delay: .32s; }
+
+.landing-page .public-page,
+.landing-page .button-primary,
+.landing-page .workflow-card,
+.landing-page .capability-card { will-change: transform; }
+.landing-page .button-primary { position: relative; isolation: isolate; overflow: hidden; transition: transform .25s ease, box-shadow .25s ease, background-color .25s ease; }
+.landing-page .button-primary::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent, rgba(255,255,255,.25), transparent);
+  transform: translateX(-135%);
+  animation: landing-shimmer 6s 1.5s ease-in-out infinite;
+}
+.landing-page .button-primary:hover { transform: translateY(-2px); box-shadow: 0 13px 30px rgba(184, 214, 122, .18); }
+.landing-page .button-primary:hover .icon { transform: translateX(3px); }
+.landing-page .button-primary .icon { position: relative; z-index: 1; transition: transform .25s ease; }
+.landing-page .text-button .icon { transition: transform .25s ease; }
+.landing-page .text-button:hover .icon { transform: translateX(3px); }
+.landing-page .workflow-card:hover .workflow-card-icon { color: var(--public-green); border-color: rgba(184, 214, 122, .5); transform: translateY(-2px); }
+.landing-page .workflow-card-icon { transition: color .25s ease, border-color .25s ease, transform .25s ease; }
+.landing-page .landing-hero h1,
+.landing-page .landing-intro h2,
+.landing-page .capabilities-section h2,
+.landing-page .evidence-section h2,
+.landing-page .landing-preview h2,
+.landing-page .landing-cta h2 { text-wrap: balance; }
+
+@media (max-width: 700px) {
+  .landing-page .button-primary::after { animation-duration: 7.5s; }
+}
