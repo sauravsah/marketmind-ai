@@ -92,11 +92,53 @@ const icons = {
   refresh: '<path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 5v6h-6"/>',
   external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/>',
+  moon: '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5 8.5 8.5 0 1 0 20.5 14.7Z"/>',
 };
 
 function icon(name, size = 18) {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || ''}</svg>`;
 }
+
+const THEME_STORAGE_KEY = 'marketmind.theme';
+
+function readThemePreference() {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch { /* Private browsing or storage restrictions should not block rendering. */ }
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function updateThemeControls() {
+  const theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  const nextTheme = theme === 'dark' ? 'light' : 'dark';
+  document.querySelectorAll('[data-action="toggle-theme"]').forEach((button) => {
+    button.setAttribute('aria-label', `Switch to ${nextTheme} mode`);
+    button.setAttribute('aria-pressed', String(theme === 'light'));
+    button.dataset.theme = theme;
+    const label = button.querySelector('[data-theme-label]');
+    if (label) label.textContent = `${nextTheme === 'light' ? 'Light' : 'Dark'} mode`;
+    const iconTarget = button.querySelector('[data-theme-icon]');
+    if (iconTarget) iconTarget.innerHTML = icon(nextTheme === 'light' ? 'sun' : 'moon', 15);
+  });
+}
+
+function applyTheme(theme, persist = true) {
+  const nextTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = nextTheme;
+  document.documentElement.style.colorScheme = nextTheme;
+  if (persist) {
+    try { window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch { /* Keep the theme for this page when storage is unavailable. */ }
+  }
+  updateThemeControls();
+}
+
+function themeToggleMarkup() {
+  return `<button class="theme-toggle" type="button" data-action="toggle-theme" aria-label="Switch to light mode" aria-pressed="false"><span class="theme-toggle-icon" data-theme-icon>${icon('sun', 15)}</span><span data-theme-label>Light mode</span></button>`;
+}
+
+applyTheme(readThemePreference(), false);
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -124,7 +166,7 @@ function loadingPage() {
 }
 
 function publicHeader() {
-  return `<header class="public-header"><a class="public-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a><nav class="public-nav" aria-label="Public navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></nav><button class="public-nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="public-mobile-nav" data-action="toggle-public-nav"><span></span><span></span><span></span></button><div class="public-nav-panel" id="public-mobile-nav" aria-label="Mobile navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></div><div class="public-actions"><button class="button button-ghost" type="button" data-route="sign-in">Sign in</button><button class="button button-primary" type="button" data-route="sign-up">Get started ${icon('arrow', 15)}</button></div></header>`;
+  return `<header class="public-header"><a class="public-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a><nav class="public-nav" aria-label="Public navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></nav><button class="public-nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="public-mobile-nav" data-action="toggle-public-nav"><span></span><span></span><span></span></button><div class="public-nav-panel" id="public-mobile-nav" aria-label="Mobile navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></div><div class="public-actions"><div class="public-theme-toggle">${themeToggleMarkup()}</div><button class="button button-ghost" type="button" data-route="sign-in">Sign in</button><button class="button button-primary" type="button" data-route="sign-up">Get started ${icon('arrow', 15)}</button></div></header>`;
 }
 
 function landingPage() {
@@ -156,12 +198,20 @@ function authPage(route) {
   } else {
     content = `<div class="auth-form-card"><div class="eyebrow">${isSignUp ? 'CREATE YOUR WORKSPACE' : 'WELCOME BACK'}</div><h1>${isSignUp ? 'Start with a<br><em>sharp question.</em>' : 'Return to your<br><em>direction.</em>'}</h1><p>${isSignUp ? 'Create your account and bring your team’s next decision into focus.' : 'Sign in to continue the intelligence path you started.'}</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="alert">${escapeHtml(feedback.message)}</div>` : ''}<form id="auth-form" class="auth-form" novalidate><div class="field"><label for="auth-email">Email address</label><input id="auth-email" name="email" type="email" autocomplete="email" required value="${escapeHtml(email)}" placeholder="you@company.com"></div><div class="field"><div class="field-label-row"><label for="auth-password">Password</label>${!isSignUp ? '<button class="inline-link" type="button" data-route="forgot-password">Forgot password?</button>' : ''}</div><input id="auth-password" name="password" type="password" autocomplete="${isSignUp ? 'new-password' : 'current-password'}" minlength="8" required placeholder="At least 8 characters"></div>${isSignUp ? '<div class="field"><label for="auth-password-confirm">Confirm password</label><input id="auth-password-confirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Repeat your password"></div>' : ''}<button class="button button-primary button-wide" type="submit">${isSignUp ? 'Create account' : 'Sign in'} ${icon('arrow', 16)}</button></form><p class="auth-switch">${isSignUp ? 'Already have an account?' : 'New to MarketMind?'} <button class="inline-link" type="button" data-route="${isSignUp ? 'sign-in' : 'sign-up'}">${isSignUp ? 'Sign in' : 'Create an account'}</button></p></div>`;
   }
-  return `<div class="public-page auth-page"><div class="auth-shell"><a class="public-brand auth-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a>${configNotice}<div class="auth-layout"><div class="auth-aside"><div class="eyebrow">${isVerify ? 'EMAIL VERIFICATION' : 'MARKETING INTELLIGENCE FOR WHAT COMES NEXT'}</div><h2>${isVerify ? 'Your workspace is<br><em>almost ready.</em>' : 'Keep the signal.<br><em>Lose the noise.</em>'}</h2><p>${isVerify ? 'A verified account keeps your strategy context and intelligence private to you.' : 'A focused workflow for teams who need to make a better next move, with evidence and uncertainty in the same frame.'}</p><div class="auth-aside-line"></div><span class="auth-aside-note">STRATEGY → MARKET → AUDIENCE → OPPORTUNITY → CAMPAIGN</span></div>${content}</div><footer class="public-footer auth-footer"><span>© ${new Date().getFullYear()} MarketMind AI</span><button class="inline-link" type="button" data-route="landing">Back to home</button></footer></div></div>`;
+  return `<div class="public-page auth-page"><div class="auth-shell"><div class="auth-topbar"><a class="public-brand auth-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a>${themeToggleMarkup()}</div>${configNotice}<div class="auth-layout"><div class="auth-aside"><div class="eyebrow">${isVerify ? 'EMAIL VERIFICATION' : 'MARKETING INTELLIGENCE FOR WHAT COMES NEXT'}</div><h2>${isVerify ? 'Your workspace is<br><em>almost ready.</em>' : 'Keep the signal.<br><em>Lose the noise.</em>'}</h2><p>${isVerify ? 'A verified account keeps your strategy context and intelligence private to you.' : 'A focused workflow for teams who need to make a better next move, with evidence and uncertainty in the same frame.'}</p><div class="auth-aside-line"></div><span class="auth-aside-note">STRATEGY → MARKET → AUDIENCE → OPPORTUNITY → CAMPAIGN</span></div>${content}</div><footer class="public-footer auth-footer"><span>© ${new Date().getFullYear()} MarketMind AI</span><button class="inline-link" type="button" data-route="landing">Back to home</button></footer></div></div>`;
 }
 
 function renderPublic() {
   root.innerHTML = state.page === 'landing' ? landingPage() : authPage(state.page);
   attachPublicEvents();
+}
+
+function attachThemeEvents() {
+  document.querySelectorAll('[data-action="toggle-theme"]').forEach((element) => element.addEventListener('click', () => {
+    const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  }));
+  updateThemeControls();
 }
 
 function setAuthFeedback(type, message) {
@@ -276,6 +326,7 @@ function attachMigrationEvents() {
 }
 
 function attachPublicEvents() {
+  attachThemeEvents();
   const landing = document.querySelector('.landing-page');
   if (landing && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     landing.classList.add('motion-ready');
@@ -428,7 +479,7 @@ function renderShell(content) {
         <header class="topbar">
           <button class="mobile-menu" type="button" aria-label="Open navigation" data-action="open-menu">☰</button>
           <div class="breadcrumb"><span>${escapeHtml(brandName)}</span><span class="breadcrumb-separator">/</span><strong>${escapeHtml(pageLabel(state.page))}</strong></div>
-          <div class="topbar-actions"><button class="icon-button" type="button" aria-label="Open help" data-action="help">?</button><div class="topbar-divider"></div><button class="profile-avatar profile-avatar-button" type="button" data-route="workspace" aria-label="Open workspace settings">${escapeHtml(initials(state.brand.name || state.auth.user?.email))}</button></div>
+          <div class="topbar-actions">${themeToggleMarkup()}<button class="icon-button" type="button" aria-label="Open help" data-action="help">?</button><div class="topbar-divider"></div><button class="profile-avatar profile-avatar-button" type="button" data-route="workspace" aria-label="Open workspace settings">${escapeHtml(initials(state.brand.name || state.auth.user?.email))}</button></div>
         </header>
         <div class="page-wrap">${workspaceSyncNotice}${progressionRail()}${content}</div>
       </main>
@@ -1125,6 +1176,18 @@ function collectAudienceScope() {
   };
 }
 
+async function responseErrorMessage(response, fallback) {
+  let serverMessage = '';
+  try {
+    const payload = await response.clone().json();
+    serverMessage = typeof payload?.error === 'string' ? payload.error.trim() : typeof payload?.message === 'string' ? payload.message.trim() : '';
+  } catch { /* Some edge failures return an empty body. */ }
+  if (response.status === 401) return 'Your session expired. Refresh the page and sign in again.';
+  if (response.status === 403) return 'Verify your email before analyzing the audience.';
+  if (response.status === 503) return serverMessage || 'Audience analysis is not configured on the server yet. Check the AI provider settings.';
+  return serverMessage || fallback;
+}
+
 async function startAudienceAnalysis() {
   if (!state.strategy?.idea) { navigate('strategy'); return; }
   const scope = collectAudienceScope();
@@ -1144,7 +1207,8 @@ async function startAudienceAnalysis() {
     const base = buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace });
     const context = { ...base, strategy: { ...base.strategy, id: state.strategy.id }, audienceScope: scope, research: currentResearch() };
     const response = await authenticatedFetch('/api/audience/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context }) });
-    if (!response.ok || !response.body) throw new Error('MarketMind could not start the audience analysis service.');
+    if (!response.ok) throw new Error(await responseErrorMessage(response, 'MarketMind could not start the audience analysis service.'));
+    if (!response.body) throw new Error('The audience analysis stream is unavailable right now. Refresh the page and try again.');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1512,6 +1576,7 @@ function navigate(page) {
 }
 
 function attachGlobalEvents() {
+  attachThemeEvents();
   document.querySelectorAll('[data-route]').forEach((element) => element.addEventListener('click', (event) => { if (element.tagName === 'A') event.preventDefault(); document.body.classList.remove('menu-open'); navigate(element.dataset.route); }));
   document.querySelectorAll('[data-action="open-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.add('menu-open')));
   document.querySelectorAll('[data-action="close-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.remove('menu-open')));

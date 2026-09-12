@@ -222,10 +222,20 @@ export const authService = {
 };
 
 export async function authenticatedFetch(input, init = {}) {
-  const token = await authService.getIdToken();
-  const headers = new Headers(init.headers || {});
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
+  const send = (token) => {
+    const headers = new Headers(init.headers || {});
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  };
+  let token = await authService.getIdToken();
+  let response = await send(token);
+  // Firebase can keep a stale ID token in a tab after a long session or a
+  // deployment. Refresh once on a 401 so a valid user does not lose a stream.
+  if (response.status === 401 && token) {
+    token = await authService.getIdToken(true);
+    if (token) response = await send(token);
+  }
+  return response;
 }
 
 export function authErrorMessage(error) {
