@@ -665,6 +665,15 @@ function currentResearch() {
   return state.strategy?.research || createEmptyResearch();
 }
 
+function researchForStream(research) {
+  if (!research) return null;
+  // Run history is for the local audit UI; the analysis services only need the
+  // active research payload. Keeping it out of the request avoids oversized
+  // requests after several research passes.
+  const { runs, activeRunId, ...activeResearch } = research;
+  return activeResearch;
+}
+
 function normalizeStrategyAudience(strategy) {
   if (!strategy?.audienceInsights) return strategy;
   return { ...strategy, audienceInsights: ensureAudienceReviewProfile(strategy.audienceInsights) };
@@ -1205,7 +1214,7 @@ async function startAudienceAnalysis() {
   navigate('audience');
   try {
     const base = buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace });
-    const context = { ...base, strategy: { ...base.strategy, id: state.strategy.id }, audienceScope: scope, research: currentResearch() };
+    const context = { ...base, strategy: { ...base.strategy, id: state.strategy.id }, audienceScope: scope, research: researchForStream(currentResearch()) };
     const response = await authenticatedFetch('/api/audience/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context }) });
     if (!response.ok) throw new Error(await responseErrorMessage(response, 'MarketMind could not start the audience analysis service.'));
     if (!response.body) throw new Error('The audience analysis stream is unavailable right now. Refresh the page and try again.');
