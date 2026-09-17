@@ -169,6 +169,17 @@ function publicHeader() {
   return `<header class="public-header"><a class="public-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a><nav class="public-nav" aria-label="Public navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></nav><button class="public-nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="public-mobile-nav" data-action="toggle-public-nav"><span></span><span></span><span></span></button><div class="public-nav-panel" id="public-mobile-nav" aria-label="Mobile navigation"><a href="#how-it-works">How it works</a><a href="#capabilities">Capabilities</a><a href="#evidence">Evidence philosophy</a></div><div class="public-actions"><div class="public-theme-toggle">${themeToggleMarkup()}</div><button class="button button-ghost" type="button" data-route="sign-in">Sign in</button><button class="button button-primary" type="button" data-route="sign-up">Get started ${icon('arrow', 15)}</button></div></header>`;
 }
 
+function landingVisualMap() {
+  const stages = [
+    { number: '01', title: 'Strategy', detail: 'Frame the decision clearly.', output: 'A focused brief', icon: 'sparkles', tone: 'green' },
+    { number: '02', title: 'Market', detail: 'See what is changing now.', output: 'A sourced signal set', icon: 'radar', tone: 'green' },
+    { number: '03', title: 'Audience', detail: 'Map people, tensions, and gaps.', output: 'An evidence-aware audience map', icon: 'message', tone: 'violet' },
+    { number: '04', title: 'Radar', detail: 'Compare openings worth exploring.', output: 'A ranked opportunity shortlist', icon: 'radar', tone: 'amber' },
+    { number: '05', title: 'Campaign', detail: 'Give the choice a strategic shape.', output: 'A grounded campaign direction', icon: 'layers', tone: 'green' },
+  ];
+  return `<section class="decision-map" id="workflow-map" aria-labelledby="decision-map-title"><div class="decision-map-heading"><div><div class="eyebrow">THE WHOLE SYSTEM AT A GLANCE</div><h2 id="decision-map-title">Five stages.<br><em>One clearer next move.</em></h2></div><p>Each stage hands a more useful piece of context to the next. The result is a connected path from an open question to a campaign direction your team can explain.</p></div><div class="decision-map-visual"><div class="decision-map-track" aria-hidden="true"></div><ol class="decision-map-nodes">${stages.map((stage, index) => `<li class="decision-map-node tone-${stage.tone}"><div class="decision-map-node-top"><span class="decision-map-number">${stage.number}</span><span class="decision-map-icon">${icon(stage.icon, 17)}</span></div><h3>${stage.title}</h3><p>${stage.detail}</p><span class="decision-map-output"><i></i>${stage.output}</span>${index < stages.length - 1 ? `<span class="decision-map-arrow" aria-hidden="true">${icon('arrow', 15)}</span>` : ''}</li>`).join('')}</ol></div><div class="decision-map-legend" aria-label="Evidence labels used in the workflow"><span><i class="evidence-dot observed"></i>Observed</span><span><i class="evidence-dot inferred"></i>Inferred</span><span><i class="evidence-dot hypothesis"></i>Hypothesis</span><span><i class="evidence-dot unknown"></i>Unknown</span><small>Evidence stays visible as the work moves forward.</small></div></section>`;
+}
+
 function landingPage() {
   const stages = [
     ['01', 'Strategy', 'Start with the decision, launch, or challenge you need to understand.'],
@@ -328,9 +339,12 @@ function attachMigrationEvents() {
 function attachPublicEvents() {
   attachThemeEvents();
   const landing = document.querySelector('.landing-page');
+  if (landing && !landing.querySelector('.decision-map')) {
+    landing.querySelector('.landing-intro')?.insertAdjacentHTML('afterend', landingVisualMap());
+  }
   if (landing && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     landing.classList.add('motion-ready');
-    const revealables = landing.querySelectorAll('.landing-intro, .workflow-card, .capabilities-section, .capability-card, .evidence-section, .landing-preview, .landing-cta');
+    const revealables = landing.querySelectorAll('.landing-intro, .decision-map, .workflow-card, .capabilities-section, .capability-card, .evidence-section, .landing-preview, .landing-cta');
     if ('IntersectionObserver' in window) {
       const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
