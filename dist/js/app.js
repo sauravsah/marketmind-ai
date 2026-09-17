@@ -342,6 +342,9 @@ function attachPublicEvents() {
   if (landing && !landing.querySelector('.decision-map')) {
     landing.querySelector('.landing-intro')?.insertAdjacentHTML('afterend', landingVisualMap());
   }
+  // The visual map is the single landing-page walkthrough; remove the older
+  // card strip that preceded it so visitors do not see the journey twice.
+  landing?.querySelector('.workflow-section')?.remove();
   if (landing && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     landing.classList.add('motion-ready');
     const revealables = landing.querySelectorAll('.landing-intro, .decision-map, .workflow-card, .capabilities-section, .capability-card, .evidence-section, .landing-preview, .landing-cta');
