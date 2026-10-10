@@ -66,7 +66,30 @@ const state = {
   auth: { status: 'loading', configured: null, session: null, user: null, error: null, redirectTo: null, feedback: null, pendingEmail: '' },
   cloud: { status: 'idle', repository: null, error: null, userId: null },
   migration: { status: 'idle', summary: null, error: null },
+  betaFeedback: { open: false, sending: false, error: null },
 };
+
+const activeRequests = new Map();
+
+function beginRequest(key) {
+  activeRequests.get(key)?.abort();
+  const controller = new AbortController();
+  activeRequests.set(key, controller);
+  return controller;
+}
+
+function finishRequest(key, controller) {
+  if (activeRequests.get(key) === controller) activeRequests.delete(key);
+}
+
+function abortActiveRequests() {
+  activeRequests.forEach((controller) => controller.abort());
+  activeRequests.clear();
+}
+
+function isAbortError(error) {
+  return error?.name === 'AbortError' || error?.code === 'ABORT_ERR';
+}
 
 const root = document.querySelector('#app');
 
@@ -210,6 +233,11 @@ function authPage(route) {
     content = `<div class="auth-form-card"><div class="eyebrow">${isSignUp ? 'CREATE YOUR WORKSPACE' : 'WELCOME BACK'}</div><h1>${isSignUp ? 'Start with a<br><em>sharp question.</em>' : 'Return to your<br><em>direction.</em>'}</h1><p>${isSignUp ? 'Create your account and bring your team’s next decision into focus.' : 'Sign in to continue the intelligence path you started.'}</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="alert">${escapeHtml(feedback.message)}</div>` : ''}<form id="auth-form" class="auth-form" novalidate><div class="field"><label for="auth-email">Email address</label><input id="auth-email" name="email" type="email" autocomplete="email" required value="${escapeHtml(email)}" placeholder="you@company.com"></div><div class="field"><div class="field-label-row"><label for="auth-password">Password</label>${!isSignUp ? '<button class="inline-link" type="button" data-route="forgot-password">Forgot password?</button>' : ''}</div><input id="auth-password" name="password" type="password" autocomplete="${isSignUp ? 'new-password' : 'current-password'}" minlength="8" required placeholder="At least 8 characters"></div>${isSignUp ? '<div class="field"><label for="auth-password-confirm">Confirm password</label><input id="auth-password-confirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Repeat your password"></div>' : ''}<button class="button button-primary button-wide" type="submit">${isSignUp ? 'Create account' : 'Sign in'} ${icon('arrow', 16)}</button></form><p class="auth-switch">${isSignUp ? 'Already have an account?' : 'New to MarketMind?'} <button class="inline-link" type="button" data-route="${isSignUp ? 'sign-in' : 'sign-up'}">${isSignUp ? 'Sign in' : 'Create an account'}</button></p></div>`;
   }
   return `<div class="public-page auth-page"><div class="auth-shell"><div class="auth-topbar"><a class="public-brand auth-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a>${themeToggleMarkup()}</div>${configNotice}<div class="auth-layout"><div class="auth-aside"><div class="eyebrow">${isVerify ? 'EMAIL VERIFICATION' : 'MARKETING INTELLIGENCE FOR WHAT COMES NEXT'}</div><h2>${isVerify ? 'Your workspace is<br><em>almost ready.</em>' : 'Keep the signal.<br><em>Lose the noise.</em>'}</h2><p>${isVerify ? 'A verified account keeps your strategy context and intelligence private to you.' : 'A focused workflow for teams who need to make a better next move, with evidence and uncertainty in the same frame.'}</p><div class="auth-aside-line"></div><span class="auth-aside-note">STRATEGY → MARKET → AUDIENCE → OPPORTUNITY → CAMPAIGN</span></div>${content}</div><footer class="public-footer auth-footer"><span>© ${new Date().getFullYear()} MarketMind AI</span><button class="inline-link" type="button" data-route="landing">Back to home</button></footer></div></div>`;
+}
+
+function betaFeedbackModal() {
+  if (!state.betaFeedback.open) return '';
+  return `<div class="feedback-overlay" data-action="close-feedback"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-title" data-feedback-dialog><button class="modal-close" type="button" aria-label="Close feedback" data-action="close-feedback">${icon('close', 17)}</button><div class="eyebrow">INVITED BETA</div><h2 id="feedback-title">Help us make the next move clearer.</h2><p>Share a short note about what worked, what felt confusing, or what you would change.</p>${state.betaFeedback.error ? `<div class="form-feedback error" role="alert">${escapeHtml(state.betaFeedback.error)}</div>` : ''}<form id="beta-feedback-form"><label for="feedback-category">Feedback type</label><select id="feedback-category" name="category" required><option value="bug">Something is broken</option><option value="confusing">Something is confusing</option><option value="idea">I have an idea</option><option value="praise">Something worked well</option><option value="other">Other</option></select><label for="feedback-message">Your note</label><textarea id="feedback-message" name="message" rows="5" maxlength="1200" required placeholder="What should we know?"></textarea><div class="feedback-dialog-actions"><button class="button button-secondary" type="button" data-action="close-feedback">Cancel</button><button class="button button-primary" type="submit" ${state.betaFeedback.sending ? 'disabled' : ''}>${state.betaFeedback.sending ? 'Sending…' : 'Send feedback'} ${icon('arrow', 15)}</button></div></form></section></div>`;
 }
 
 function renderPublic() {
@@ -482,7 +510,7 @@ function renderShell(content) {
             <div class="workspace-copy"><strong>${escapeHtml(brandName)}</strong><span>${escapeHtml(state.auth.user?.email || 'Workspace account')}</span></div>
             ${icon('chevron', 15)}
             </summary>
-            <div class="account-popover"><button type="button" data-route="workspace">${icon('settings', 15)} Workspace settings</button><button type="button" data-route="brand">${icon('message', 15)} Brand voice</button><div class="account-popover-rule"></div><button type="button" data-auth-action="sign-out">${icon('arrow', 15)} Sign out</button></div>
+            <div class="account-popover"><button type="button" data-route="workspace">${icon('settings', 15)} Workspace settings</button><button type="button" data-route="brand">${icon('message', 15)} Brand voice</button><button type="button" data-action="open-feedback">${icon('message', 15)} Send beta feedback</button><div class="account-popover-rule"></div><button type="button" data-auth-action="sign-out">${icon('arrow', 15)} Sign out</button></div>
           </details>
         <div class="journey-intro"><div class="eyebrow">YOUR JOURNEY</div><p>Move from a question to a clearer next move.</p></div>
         <div class="sidebar-bottom">
@@ -500,7 +528,7 @@ function renderShell(content) {
         </header>
         <div class="page-wrap">${workspaceSyncNotice}${progressionRail()}${content}</div>
       </main>
-      <div id="toast-region" class="toast-region" aria-live="polite"></div>
+      <div id="toast-region" class="toast-region" aria-live="polite"></div>${betaFeedbackModal()}
     </div>`);
   attachGlobalEvents();
 }
@@ -1135,9 +1163,11 @@ async function startResearch() {
   state.researchFilter = 'all';
   state.researchRun = { loading: true, current: 'understanding', detail: '', stages: [] };
   navigate('research');
+  const requestController = beginRequest('research');
   try {
-    const response = await authenticatedFetch('/api/research/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context: buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace }) }) });
-    if (!response.ok || !response.body) throw new Error('MarketMind could not start the research service.');
+    const response = await authenticatedFetch('/api/research/stream', { method: 'POST', signal: requestController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context: buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace }) }) });
+    if (!response.ok) throw new Error(await responseErrorMessage(response, 'MarketMind could not start the research service.'));
+    if (!response.body) throw new Error('The research stream is unavailable right now. Try again shortly.');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1166,13 +1196,16 @@ async function startResearch() {
     render();
     showToast(result.sources?.length ? 'Research completed. Review the evidence trail.' : result.meta?.warnings?.[0] || 'Live market research is temporarily unavailable. Try again shortly.', result.sources?.length ? 'success' : 'info');
   } catch (error) {
+    if (isAbortError(error)) return;
     const failed = createEmptyResearch();
     failed.meta = { ...failed.meta, depth: state.strategy.researchDepth || 'balanced', warnings: ['Live market research is temporarily unavailable. Try again shortly.'], providerStatus: 'failed' };
-    state.strategy.research = appendResearchRun(state.strategy.research, failed);
+    state.strategy.research = appendResearchRun(state.strategy.research, failed, { preservePrevious: Boolean(state.strategy.research?.sources?.length || state.strategy.research?.meta?.researchedAt) });
     persistStrategy(state.strategy);
     state.researchRun = null;
     render();
     showToast(error.message || 'Market research failed.', 'error');
+  } finally {
+    finishRequest('research', requestController);
   }
 }
 
@@ -1208,9 +1241,9 @@ async function responseErrorMessage(response, fallback) {
     const payload = await response.clone().json();
     serverMessage = typeof payload?.error === 'string' ? payload.error.trim() : typeof payload?.message === 'string' ? payload.message.trim() : '';
   } catch { /* Some edge failures return an empty body. */ }
-  if (response.status === 401) return 'Your session expired. Refresh the page and sign in again.';
-  if (response.status === 403) return 'Verify your email before analyzing the audience.';
-  if (response.status === 503) return serverMessage || 'Audience analysis is not configured on the server yet. Check the AI provider settings.';
+  if (response.status === 401) return serverMessage || 'Your session expired. Refresh the page and sign in again.';
+  if (response.status === 403) return serverMessage || 'Verify your email before using this intelligence stage.';
+  if (response.status === 503) return serverMessage || 'The intelligence service is temporarily unavailable. Try again shortly.';
   return serverMessage || fallback;
 }
 
@@ -1229,10 +1262,11 @@ async function startAudienceAnalysis() {
   state.selectedSource = null;
   state.audienceRun = { loading: true, current: 'reading', detail: '', stages: [] };
   navigate('audience');
+  const requestController = beginRequest('audience');
   try {
     const base = buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace });
     const context = { ...base, strategy: { ...base.strategy, id: state.strategy.id }, audienceScope: scope, research: researchForStream(currentResearch()) };
-    const response = await authenticatedFetch('/api/audience/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context }) });
+    const response = await authenticatedFetch('/api/audience/stream', { method: 'POST', signal: requestController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context }) });
     if (!response.ok) throw new Error(await responseErrorMessage(response, 'MarketMind could not start the audience analysis service.'));
     if (!response.body) throw new Error('The audience analysis stream is unavailable right now. Refresh the page and try again.');
     const reader = response.body.getReader();
@@ -1263,9 +1297,12 @@ async function startAudienceAnalysis() {
     render();
     showToast(result.meta?.mode === 'research-light' ? 'Research-light audience intelligence is ready.' : 'Audience intelligence is ready. Review the evidence trail.', 'success');
   } catch (error) {
+    if (isAbortError(error)) return;
     state.audienceRun = null;
     render();
     showToast(error.message || 'Audience analysis failed.', 'error');
+  } finally {
+    finishRequest('audience', requestController);
   }
 }
 
@@ -1292,14 +1329,16 @@ async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
   state.compareOpportunityIds = [];
   state.opportunityRun = { loading: true, current: 'market', detail: '', stages: [], lens };
   navigate('radar');
+  const requestController = beginRequest('radar');
   try {
     const previousRadar = currentOpportunityRadar();
     const variation = (Number(previousRadar.meta?.variation) || 0) + 1;
     const previousOpportunities = (previousRadar.opportunities || []).map((item) => ({ title: item.title, strategicThesis: item.strategicThesis }));
     const base = buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace });
     const context = { ...base, strategy: { ...base.strategy, id: state.strategy.id }, research: currentResearch(), audience: state.strategy.audienceInsights, previousOpportunities, intelligenceStatus: { research: readiness.researchStatus, audience: readiness.audienceStatus } };
-    const response = await authenticatedFetch('/api/opportunities/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context, lens, variation }) });
-    if (!response.ok || !response.body) throw new Error('MarketMind could not start Opportunity Radar.');
+    const response = await authenticatedFetch('/api/opportunities/stream', { method: 'POST', signal: requestController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context, lens, variation }) });
+    if (!response.ok) throw new Error(await responseErrorMessage(response, 'MarketMind could not start Opportunity Radar.'));
+    if (!response.body) throw new Error('The Opportunity Radar stream is unavailable right now. Try again shortly.');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1329,9 +1368,12 @@ async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
     render();
     showToast(result.opportunities?.length ? 'Potential opportunities are ready to explore.' : result.meta?.warnings?.[0] || 'More intelligence is needed before opportunities can be identified.', result.opportunities?.length ? 'success' : 'info');
   } catch (error) {
+    if (isAbortError(error)) return;
     state.opportunityRun = null;
     render();
     showToast(error.message || 'Opportunity Radar failed.', 'error');
+  } finally {
+    finishRequest('radar', requestController);
   }
 }
 
@@ -1352,12 +1394,14 @@ async function startCampaignStrategy(section = 'all') {
   state.campaignHandoff = false;
   state.campaignRun = { loading: true, current: 'opportunity', detail: '', stages: [], section };
   navigate('campaigns');
+  const requestController = beginRequest('campaigns');
   try {
     const base = buildStrategyContext({ strategy: state.strategy, brand: state.brand, workspace: state.workspace });
     const existing = currentCampaignStrategy();
     const context = { ...base, strategy: { ...base.strategy, id: state.strategy.id }, research: currentResearch(), audience: state.strategy.audienceInsights, opportunity, campaignStrategy: existing };
-    const response = await authenticatedFetch('/api/campaign/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context, existing, section }) });
-    if (!response.ok || !response.body) throw new Error('MarketMind could not start Campaign Strategy Studio.');
+    const response = await authenticatedFetch('/api/campaign/stream', { method: 'POST', signal: requestController.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context, existing, section }) });
+    if (!response.ok) throw new Error(await responseErrorMessage(response, 'MarketMind could not start Campaign Strategy Studio.'));
+    if (!response.body) throw new Error('The Campaign Strategy stream is unavailable right now. Try again shortly.');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1386,9 +1430,12 @@ async function startCampaignStrategy(section = 'all') {
     render();
     showToast(result.meta?.status === 'ready' ? 'Campaign strategy is ready to review.' : result.meta?.warnings?.[0] || 'Campaign strategy needs more intelligence.', result.meta?.status === 'ready' ? 'success' : 'info');
   } catch (error) {
+    if (isAbortError(error)) return;
     state.campaignRun = null;
     render();
     showToast(error.message || 'Campaign strategy failed.', 'error');
+  } finally {
+    finishRequest('campaigns', requestController);
   }
 }
 
@@ -1580,6 +1627,13 @@ function render() {
 
 function navigate(page) {
   const requested = mapHashRoute(page);
+  ['research', 'audience', 'radar', 'campaigns'].forEach((key) => {
+    if (key !== requested) {
+      activeRequests.get(key)?.abort();
+      const runKey = { research: 'researchRun', audience: 'audienceRun', radar: 'opportunityRun', campaigns: 'campaignRun' }[key];
+      state[runKey] = null;
+    }
+  });
   if (requested !== state.page && requested !== 'verify-email') state.auth.feedback = null;
   if (isProtectedRoute(requested) && !state.auth.session) {
     state.auth.redirectTo = requested;
@@ -1607,6 +1661,38 @@ function attachGlobalEvents() {
   document.querySelectorAll('[data-action="open-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.add('menu-open')));
   document.querySelectorAll('[data-action="close-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.remove('menu-open')));
   document.querySelectorAll('[data-action="help"]').forEach((element) => element.addEventListener('click', () => showToast('The product guide will be available as the workspace expands.', 'info')));
+  document.querySelectorAll('[data-action="open-feedback"]').forEach((element) => element.addEventListener('click', () => {
+    state.betaFeedback = { open: true, sending: false, error: null };
+    document.body.classList.remove('menu-open');
+    render();
+    document.querySelector('#feedback-message')?.focus();
+  }));
+  document.querySelectorAll('[data-action="close-feedback"]').forEach((element) => element.addEventListener('click', (event) => {
+    if (event.currentTarget === event.target || event.target.closest('.modal-close')) {
+      state.betaFeedback = { open: false, sending: false, error: null };
+      render();
+    }
+  }));
+  document.querySelector('#beta-feedback-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    state.betaFeedback = { ...state.betaFeedback, sending: true, error: null };
+    render();
+    try {
+      const response = await authenticatedFetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: data.get('category'), message: data.get('message'), route: window.location.hash, clientTimestamp: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error(await responseErrorMessage(response, 'Feedback could not be sent. Try again shortly.'));
+      state.betaFeedback = { open: false, sending: false, error: null };
+      render();
+      showToast('Thanks — your beta feedback was sent.', 'success');
+    } catch (error) {
+      state.betaFeedback = { ...state.betaFeedback, sending: false, error: isAbortError(error) ? 'Feedback was cancelled. Try again when ready.' : error.message || 'Feedback could not be sent. Try again shortly.' };
+      render();
+    }
+  });
   document.querySelector('[data-action="retry-cloud"]')?.addEventListener('click', async (event) => {
     event.currentTarget.disabled = true;
     state.cloud = { ...state.cloud, status: 'idle', error: null };
@@ -1738,6 +1824,7 @@ function showToast(message, type = 'info') {
 window.addEventListener('hashchange', () => {
   if (['how-it-works', 'capabilities', 'evidence'].includes(window.location.hash.slice(1))) return;
   const requested = routeFromHash();
+  if (requested !== state.page) abortActiveRequests();
   if (state.auth.status === 'loading') return;
   if (isProtectedRoute(requested) && !state.auth.session) {
     state.auth.redirectTo = requested;

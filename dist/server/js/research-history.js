@@ -28,10 +28,17 @@ export function createResearchRunSnapshot(research, { id, now = new Date() } = {
   };
 }
 
-export function appendResearchRun(previousResearch, nextResearch, { id, now = new Date(), maxRuns = DEFAULT_RUN_LIMIT } = {}) {
+export function appendResearchRun(previousResearch, nextResearch, { id, now = new Date(), maxRuns = DEFAULT_RUN_LIMIT, preservePrevious = false } = {}) {
   const priorRuns = Array.isArray(previousResearch?.runs) ? previousResearch.runs.map(clone) : [];
   const run = createResearchRunSnapshot(nextResearch, { id, now });
   const runs = [...priorRuns, run].slice(-Math.max(1, Number(maxRuns) || DEFAULT_RUN_LIMIT));
+  if (preservePrevious && previousResearch) {
+    return {
+      ...clone(previousResearch),
+      meta: { ...clone(previousResearch.meta || {}), lastAttemptedAt: run.researchedAt, lastAttemptStatus: nextResearch?.meta?.providerStatus || 'failed', warnings: nextResearch?.meta?.warnings || previousResearch.meta?.warnings || [] },
+      runs,
+    };
+  }
   return { ...clone(nextResearch), activeRunId: run.id, runs };
 }
 

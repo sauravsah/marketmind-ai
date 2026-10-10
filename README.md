@@ -30,7 +30,9 @@ Then open [http://localhost:4173](http://localhost:4173).
 - `js/services/campaign.js` — selected-opportunity preparation, campaign normalization, evidence linkage, confidence downgrades, territory deduplication, regeneration merging, and user overrides
 - `server/config.mjs` — server-only environment configuration boundary for internal adapters plus the public Firebase runtime config
 - `server/firebase-auth.mjs` — dependency-free Firebase ID-token signature and claim verification for server requests
+- `server/feedback.mjs` — bounded, sanitized beta-feedback payloads
 - `server.mjs` — local HTTP/SSE boundary; intelligence streams require a verified Firebase bearer token
+- `functions/` — Firebase Auth blocking function for the invited-beta email allowlist
 - `scripts/check.mjs` — source presence and obvious-secret checks
 - `tests/` — model, evidence, opportunity, campaign, and integration contract tests
 
@@ -60,3 +62,31 @@ Supported internal variables are:
 The browser sends strategy context plus its Firebase ID token to the local server. The server authenticates the request, reads internal provider variables, calls internal adapters, and returns only normalized product results or the friendly fallback messages shown in the UI.
 
 After the first verified sign-in, MarketMind checks for existing local data. It shows a migration summary, fills empty remote workspace/brand fields from local values, imports local strategies only when their IDs do not conflict, and retains the local browser copy as a backup. The per-user migration marker is stored locally; choosing Skip records the decision without deleting local data.
+
+## Invited beta access
+
+The beta uses a Firebase Auth `beforeUserCreated` blocking function. It fails closed in `invite-only` mode when the allowlist is empty or malformed, and it normalizes email addresses before matching. The allowlist is never committed to GitHub or sent to the browser.
+
+From an authenticated Firebase CLI session, configure the Firebase project and secret outside the repository:
+
+```text
+firebase use <your-firebase-project>
+firebase functions:secrets:set BETA_ALLOWED_EMAILS
+firebase deploy --only functions,firestore:rules
+```
+
+When Firebase asks for the `BETA_ALLOWED_EMAILS` value, enter comma- or newline-separated email addresses. Deploy the Functions parameter `BETA_ACCESS_MODE` as `invite-only` for the beta. To open signup later, redeploy it as `public`. Firebase Auth blocking functions require the Blaze plan.
+
+The workspace account menu includes a lightweight beta-feedback form. `POST /api/feedback` requires a verified Firebase session, accepts only bounded category/message/route fields, and emits a feedback ID plus a sanitized structured log entry. It does not persist tokens, provider responses, or full strategy payloads.
+
+## Release checks
+
+Before promoting a Vercel deployment, run:
+
+```text
+npm test
+npm run lint
+npm run build
+```
+
+Then verify the preview flow with an allowlisted Firebase test account: signup, verification, workspace initialization, local migration, all five intelligence stages, feedback submission, sign-out, and password reset. Promote the preview only after unauthenticated, unverified, and verified API checks return the expected `401`, `403`, and successful responses.

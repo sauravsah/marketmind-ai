@@ -242,6 +242,7 @@ export function authErrorMessage(error) {
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '').toLowerCase();
   if (message.includes('not configured')) return 'Authentication is not configured yet. Add the Firebase web configuration to the server environment.';
+  if (message.includes('invite-only') || message.includes('beta administrator') || code.includes('permission-denied') || code.includes('blocking-function')) return 'MarketMind is currently invite-only. Contact the beta administrator for access.';
   if (code.includes('invalid-credential') || code.includes('wrong-password') || message.includes('invalid login credentials')) return 'That email and password combination was not recognized.';
   if (code.includes('email-already-in-use')) return 'An account already exists for that email. Try signing in instead.';
   if (code.includes('user-not-found')) return 'That email and password combination was not recognized.';

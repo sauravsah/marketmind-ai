@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decideAuthRoute, isProtectedRoute, isVerifiedUser, routeFromHash } from '../js/auth-routes.js';
+import { authErrorMessage } from '../js/auth.js';
 
 const verifiedUser = { id: 'user-1', email: 'team@example.com', email_confirmed_at: '2026-08-29T12:00:00.000Z' };
 const unverifiedUser = { id: 'user-1', email: 'team@example.com', email_confirmed_at: null };
@@ -33,4 +34,8 @@ test('verified users can return to the requested stage and public auth routes la
 test('Firebase-shaped users are treated as verified by the provider-neutral route guard', () => {
   assert.equal(isVerifiedUser({ uid: 'firebase-user', emailVerified: true }), true);
   assert.deepEqual(decideAuthRoute('strategy', { user: { uid: 'firebase-user', emailVerified: true } }, { uid: 'firebase-user', emailVerified: true }), { route: 'strategy' });
+});
+
+test('invite-only Firebase blocking errors have a clear user-facing message', () => {
+  assert.equal(authErrorMessage({ code: 'permission-denied', message: 'MarketMind is currently invite-only.' }), 'MarketMind is currently invite-only. Contact the beta administrator for access.');
 });

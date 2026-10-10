@@ -13,6 +13,7 @@ cpSync(join(project, 'js'), join(dist, 'js'), { recursive: true });
 cpSync(join(project, 'js'), join(dist, 'server', 'js'), { recursive: true });
 cpSync(join(project, 'server', 'config.mjs'), join(dist, 'server', 'config.mjs'));
 cpSync(join(project, 'server', 'firebase-auth.mjs'), join(dist, 'server', 'firebase-auth.mjs'));
+cpSync(join(project, 'server', 'feedback.mjs'), join(dist, 'server', 'feedback.mjs'));
 cpSync(join(project, 'server', 'worker.mjs'), join(dist, 'server', 'worker.mjs'));
 const workerPath = join(dist, 'server', 'worker.mjs');
 const workerSource = readFileSync(workerPath, 'utf8')

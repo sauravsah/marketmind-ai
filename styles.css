@@ -1576,3 +1576,16 @@ html { color-scheme: dark; }
 @media (max-width: 700px) {
   .landing-page .button-primary::after { animation-duration: 7.5s; }
 }
+
+.feedback-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(4, 8, 8, .72); backdrop-filter: blur(12px); }
+.feedback-dialog { position: relative; width: min(100%, 520px); padding: 32px; color: var(--public-ink, #edf2ea); background: var(--public-panel, #131818); border: 1px solid var(--public-line, rgba(205, 220, 204, .16)); box-shadow: 20px 20px 0 rgba(184, 214, 122, .06); }
+.feedback-dialog .modal-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; display: grid; place-items: center; color: var(--public-muted, #a6b0a7); background: transparent; border: 1px solid var(--public-line, rgba(205, 220, 204, .16)); cursor: pointer; }
+.feedback-dialog h2 { max-width: 420px; margin: 14px 0 10px; font: 500 34px/1 var(--font-display, Georgia, serif); letter-spacing: -.05em; }
+.feedback-dialog p { margin: 0 0 24px; color: var(--public-muted, #a6b0a7); font-size: 13px; line-height: 1.6; }
+.feedback-dialog form { display: grid; gap: 9px; }
+.feedback-dialog label { color: var(--public-muted, #a6b0a7); font: 600 10px var(--font-sans, Inter, system-ui, sans-serif); letter-spacing: .08em; text-transform: uppercase; }
+.feedback-dialog select, .feedback-dialog textarea { width: 100%; padding: 12px; color: var(--public-ink, #edf2ea); background: rgba(5, 10, 10, .7); border: 1px solid var(--public-line, rgba(205, 220, 204, .16)); outline: none; font: inherit; }
+.feedback-dialog select:focus, .feedback-dialog textarea:focus, .feedback-dialog .modal-close:focus-visible { border-color: var(--public-green, #b8d67a); box-shadow: 0 0 0 3px rgba(184, 214, 122, .12); }
+.feedback-dialog textarea { min-height: 120px; resize: vertical; }
+.feedback-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+@media (max-width: 600px) { .feedback-dialog { padding: 26px 20px 20px; } .feedback-dialog h2 { font-size: 29px; } .feedback-dialog-actions { flex-direction: column-reverse; } .feedback-dialog-actions .button { width: 100%; justify-content: center; } }

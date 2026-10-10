@@ -1,7 +1,7 @@
 import { access, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const required = ['index.html', 'styles.css', 'js/app.js', 'js/models.js', 'js/storage.js', 'js/auth.js', 'js/auth-routes.js', 'js/repository.js', 'js/research-history.js', 'js/audience-review.js', 'js/client/context.js', 'js/client/intelligence.js', 'js/client/campaign.js', 'server/config.mjs', 'server/firebase-auth.mjs', 'firebase.json', 'firebase/firestore.rules', 'js/services/audience.js', 'js/prompts/audience.js', 'js/services/opportunity.js', 'js/prompts/opportunity.js', 'js/services/campaign.js', 'js/prompts/campaign.js'];
+const required = ['index.html', 'styles.css', 'js/app.js', 'js/models.js', 'js/storage.js', 'js/auth.js', 'js/auth-routes.js', 'js/repository.js', 'js/research-history.js', 'js/audience-review.js', 'js/client/context.js', 'js/client/intelligence.js', 'js/client/campaign.js', 'server/config.mjs', 'server/firebase-auth.mjs', 'server/feedback.mjs', 'firebase.json', 'firebase/firestore.rules', 'functions/index.mjs', 'functions/access.mjs', 'api/feedback.mjs', 'js/services/audience.js', 'js/prompts/audience.js', 'js/services/opportunity.js', 'js/prompts/opportunity.js', 'js/services/campaign.js', 'js/prompts/campaign.js'];
 for (const file of required) {
   await access(join(process.cwd(), file));
 }
