@@ -36,7 +36,7 @@ async function anonymizeUserId(uid = '') {
   const value = String(uid || '');
   if (!value) return 'anonymous';
   if (globalThis.crypto?.subtle) {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
     return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 16);
   }
   let hash = 2166136261;

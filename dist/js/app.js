@@ -83,7 +83,16 @@ function finishRequest(key, controller) {
 }
 
 function abortActiveRequests() {
-  activeRequests.forEach((controller) => controller.abort());
+  const runStateByRequest = {
+    research: 'researchRun',
+    audience: 'audienceRun',
+    radar: 'opportunityRun',
+    campaigns: 'campaignRun',
+  };
+  activeRequests.forEach((controller, key) => {
+    controller.abort();
+    if (runStateByRequest[key]) state[runStateByRequest[key]] = null;
+  });
   activeRequests.clear();
 }
 
