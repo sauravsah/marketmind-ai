@@ -63,9 +63,9 @@ The browser sends strategy context plus its Firebase ID token to the local serve
 
 After the first verified sign-in, MarketMind checks for existing local data. It shows a migration summary, fills empty remote workspace/brand fields from local values, imports local strategies only when their IDs do not conflict, and retains the local browser copy as a backup. The per-user migration marker is stored locally; choosing Skip records the decision without deleting local data.
 
-## Invited beta access
+## Optional invited beta access
 
-The beta uses a Firebase Auth `beforeUserCreated` blocking function. It fails closed in `invite-only` mode when the allowlist is empty or malformed, and it normalizes email addresses before matching. The allowlist is never committed to GitHub or sent to the browser.
+Public signup is enabled for the current release. The repository also contains an optional Firebase Auth `beforeUserCreated` blocking function for a future invited beta. It fails closed in `invite-only` mode when the allowlist is empty or malformed, and it normalizes email addresses before matching. The function is not deployed for the public-signup release, and the allowlist is never committed to GitHub or sent to the browser.
 
 From an authenticated Firebase CLI session, configure the Firebase project and secret outside the repository:
 
@@ -75,7 +75,7 @@ firebase functions:secrets:set BETA_ALLOWED_EMAILS
 firebase deploy --only functions,firestore:rules
 ```
 
-When Firebase asks for the `BETA_ALLOWED_EMAILS` value, enter comma- or newline-separated email addresses. Deploy the Functions parameter `BETA_ACCESS_MODE` as `invite-only` for the beta. To open signup later, redeploy it as `public`. Firebase Auth blocking functions require the Blaze plan.
+When Firebase asks for the `BETA_ALLOWED_EMAILS` value, enter comma- or newline-separated email addresses. Deploy the Functions parameter `BETA_ACCESS_MODE` as `invite-only` only when private beta access is intentionally enabled. To keep signup public, do not deploy the blocking function. Firebase Auth blocking functions require the Blaze plan.
 
 The workspace account menu includes a lightweight beta-feedback form. `POST /api/feedback` requires a verified Firebase session, accepts only bounded category/message/route fields, and emits a feedback ID plus a sanitized structured log entry. It does not persist tokens, provider responses, or full strategy payloads.
 
