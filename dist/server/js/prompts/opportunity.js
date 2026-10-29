@@ -1,28 +1,14 @@
+import { PACKET_BUDGET, bindCitedPacket, bindItemsToPacket, boundStringList, clipText } from './budget.js';
+
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function sourcePacket(sources = []) {
-  return sources.map((source) => ({
-    id: source.id,
-    title: source.title,
-    domain: source.domain,
-    snippet: source.snippet,
-    publishedAt: source.publishedAt,
-    sourceType: source.sourceType,
-    freshness: source.freshness,
-    quality: source.quality,
+function itemPacket(items = [], packetIds, packetBudget) {
+  return bindItemsToPacket(items, packetIds, PACKET_BUDGET.maxSignalItems, packetBudget).map((item) => ({
+    freshness: 'unknown',
+    ...item,
   }));
-}
-
-function itemPacket(items = []) {
-  return items.map((item) => ({
-    statement: clean(item.statement || item.summary || item.title),
-    evidenceType: item.evidenceType || 'unknown',
-    sourceIds: item.sourceIds || [],
-    confidence: item.confidence || 'low',
-    freshness: item.freshness || 'unknown',
-  })).filter((item) => item.statement);
 }
 
 export function buildOpportunityScoringPrompt() {
@@ -51,12 +37,16 @@ export function buildOpportunityValidationPrompt() {
   };
 }
 
-export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced', variation = 0) {
+export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced', variation = 0, packetBudget) {
   const scoring = buildOpportunityScoringPrompt();
   const validation = buildOpportunityValidationPrompt();
   const research = context?.research || {};
   const audience = context?.audience || {};
   const reviewedAudience = Array.isArray(evidence.audienceSignals) ? evidence.audienceSignals : [];
+  const marketSignals = Array.isArray(evidence.marketSignals) ? evidence.marketSignals : [];
+  const emergingThemes = Array.isArray(research.emergingThemes) ? research.emergingThemes : [];
+  const contradictions = Array.isArray(research.contradictions) ? research.contradictions : [];
+  const cited = bindCitedPacket(evidence.sources, [marketSignals, emergingThemes, contradictions, reviewedAudience], packetBudget);
   return {
     system: [
       'You are MarketMind, a careful senior marketing strategist.',
@@ -75,7 +65,7 @@ export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced'
     user: JSON.stringify({
       exploreThrough: lens,
       explorationPass: Number.isFinite(Number(variation)) ? Math.max(0, Math.floor(Number(variation))) : 0,
-      priorOpportunities: Array.isArray(context?.previousOpportunities) ? context.previousOpportunities.map((item) => ({ title: clean(item?.title), strategicThesis: clean(item?.strategicThesis) })).filter((item) => item.title || item.strategicThesis) : [],
+      priorOpportunities: Array.isArray(context?.previousOpportunities) ? context.previousOpportunities.slice(0, 5).map((item) => ({ title: clipText(item?.title, 120), strategicThesis: clipText(item?.strategicThesis, PACKET_BUDGET.maxStatementChars) })).filter((item) => item.title || item.strategicThesis) : [],
       strategyContext: {
         id: context?.strategy?.id,
         brand: clean(context?.brand?.name),
@@ -84,21 +74,21 @@ export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced'
         idea: clean(context?.strategy?.idea),
         audience: clean(context?.strategy?.audience),
         market: clean(context?.strategy?.market),
-        platforms: context?.strategy?.platforms || [],
+        platforms: boundStringList(context?.strategy?.platforms),
         objective: clean(context?.strategy?.objective),
-        competitors: context?.strategy?.competitors || [],
+        competitors: boundStringList(context?.strategy?.competitors),
         brandVoice: context?.brand?.voice || {},
       },
       intelligenceStatus: context?.intelligenceStatus || {},
       marketIntelligence: {
-        signals: itemPacket(evidence.marketSignals),
-        emergingThemes: itemPacket(research.emergingThemes),
-        contradictions: itemPacket(research.contradictions),
-        sources: sourcePacket(evidence.sources),
+        signals: itemPacket(marketSignals, cited.packetIds, packetBudget),
+        emergingThemes: itemPacket(emergingThemes, cited.packetIds, packetBudget),
+        contradictions: itemPacket(contradictions, cited.packetIds, packetBudget),
+        sources: cited.packet,
       },
       audienceIntelligence: {
         evidenceCoverage: audience.evidenceCoverage || {},
-        reviewedSignals: itemPacket(reviewedAudience),
+        reviewedSignals: itemPacket(reviewedAudience, cited.packetIds, packetBudget),
       },
       requiredOutput: {
         opportunities: 'array; default up to 5, fewer when evidence is weak or territories overlap',

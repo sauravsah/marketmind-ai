@@ -1,18 +1,11 @@
+import { boundSourcePacket, boundStringList } from './budget.js';
+
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function sourcePacket(sources = []) {
-  return sources.map((source) => ({
-    id: source.id,
-    title: source.title,
-    domain: source.domain,
-    snippet: source.snippet,
-    publishedAt: source.publishedAt,
-    sourceType: source.sourceType,
-    freshness: source.freshness,
-    quality: source.quality,
-  }));
+function sourcePacket(sources = [], packetBudget) {
+  return boundSourcePacket(sources, packetBudget);
 }
 
 export function validateAudienceEvidence(item, sourceIds = []) {
@@ -27,7 +20,7 @@ export function validateAudienceEvidence(item, sourceIds = []) {
   };
 }
 
-export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behavior, motivation, friction, and decision context') {
+export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behavior, motivation, friction, and decision context', packetBudget) {
   return {
     system: [
       'You are MarketMind, a careful audience intelligence analyst.',
@@ -52,18 +45,18 @@ export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behav
         idea: clean(context?.strategy?.idea),
         audience: clean(context?.strategy?.audience),
         market: clean(context?.strategy?.market),
-        platforms: context?.strategy?.platforms || [],
+        platforms: boundStringList(context?.strategy?.platforms),
         objective: clean(context?.strategy?.objective),
-        competitors: context?.strategy?.competitors || [],
+        competitors: boundStringList(context?.strategy?.competitors),
       },
       audienceScope: context?.audienceScope || {},
-      evidencePacket: sourcePacket(evidence),
+      evidencePacket: sourcePacket(evidence, packetBudget),
     }, null, 2),
   };
 }
 
-export function buildAudienceAnalysisPrompt(context, evidence = []) {
-  const behavioralPrompt = buildBehavioralSynthesisPrompt(context, evidence);
+export function buildAudienceAnalysisPrompt(context, evidence = [], packetBudget) {
+  const behavioralPrompt = buildBehavioralSynthesisPrompt(context, evidence, undefined, packetBudget);
   return {
     system: `${behavioralPrompt.system} Build a structured audience profile, keeping evidence, inference, hypothesis, and unknown visibly distinct. Do not create a persona biography or write a customer quote.`,
     user: JSON.stringify({

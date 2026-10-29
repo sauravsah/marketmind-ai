@@ -29,6 +29,18 @@ export function getInternalProviderConfig(source = defaultEnvironment()) {
       endpoint: environment('AI_BASE_URL', source) || environment('MARKETMIND_AI_BASE_URL', source),
       model: environment('AI_MODEL', source) || environment('MARKETMIND_AI_MODEL', source) || 'gpt-4o-mini',
       apiKey: environment('AI_API_KEY', source) || environment('MARKETMIND_AI_API_KEY', source),
+      ...(environment('AI_MAX_OUTPUT_TOKENS', source) || environment('MARKETMIND_AI_MAX_OUTPUT_TOKENS', source)
+        ? { maxTokens: environment('AI_MAX_OUTPUT_TOKENS', source) || environment('MARKETMIND_AI_MAX_OUTPUT_TOKENS', source) }
+        : {}),
+      ...(environment('AI_REASONING_EFFORT', source) || environment('MARKETMIND_AI_REASONING_EFFORT', source)
+        ? { reasoningEffort: environment('AI_REASONING_EFFORT', source) || environment('MARKETMIND_AI_REASONING_EFFORT', source) }
+        : {}),
+      ...(environment('AI_PROMPT_TOKEN_BUDGET', source) || environment('MARKETMIND_AI_PROMPT_TOKEN_BUDGET', source)
+        ? { promptTokenBudget: environment('AI_PROMPT_TOKEN_BUDGET', source) || environment('MARKETMIND_AI_PROMPT_TOKEN_BUDGET', source) }
+        : {}),
+      ...(environment('AI_RETRY_BUDGET_MS', source) || environment('MARKETMIND_AI_RETRY_BUDGET_MS', source)
+        ? { retryBudgetMs: environment('AI_RETRY_BUDGET_MS', source) || environment('MARKETMIND_AI_RETRY_BUDGET_MS', source) }
+        : {}),
     },
     search: {
       provider: environment('SEARCH_PROVIDER', source) || environment('MARKETMIND_SEARCH_PROVIDER', source) || 'Serper',

@@ -1,27 +1,32 @@
+import { PACKET_BUDGET, bindCitedPacket, bindItemsToPacket, boundStringList, boundValue, clipText, tighterBudget } from './budget.js';
+
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function claimPacket(value) {
+function claimPacket(value, budget, packetIds) {
   if (!value) return null;
-  if (typeof value === 'string') return { statement: clean(value), evidenceType: 'unknown', sourceIds: [] };
-  return { statement: clean(value.statement || value.text || value.summary), evidenceType: value.evidenceType || 'unknown', confidence: value.confidence || 'low', sourceIds: value.sourceIds || [] };
+  if (typeof value === 'string') return { statement: clipText(value, budget.maxStatementChars), evidenceType: 'unknown', sourceIds: [] };
+  const sourceIds = (value.sourceIds || []).slice(0, budget.maxSourceIdsPerItem).filter((id) => !packetIds || packetIds.has(id));
+  return { statement: clipText(value.statement || value.text || value.summary, budget.maxStatementChars), evidenceType: value.evidenceType || 'unknown', confidence: value.confidence || 'low', sourceIds };
 }
 
-function itemPacket(items = []) {
-  return (Array.isArray(items) ? items : []).map((item) => ({
-    statement: clean(item?.statement || item?.message || item?.summary || item?.title),
-    evidenceType: item?.evidenceType || 'unknown',
-    confidence: item?.confidence || 'low',
-    sourceIds: item?.sourceIds || [],
-  })).filter((item) => item.statement);
-}
+// Campaign packets serialize every prior stage, so they use a tighter profile
+// to keep the largest request inside provider token budgets.
+const CAMPAIGN_PACKET_BUDGET = {
+  maxSources: 2,
+  maxSnippetChars: 150,
+  maxTitleChars: 90,
+  maxStatementChars: 140,
+  maxItemsPerSection: 2,
+  maxSignalItems: 8,
+  maxSourceIdsPerItem: 4,
+};
 
-function sourcePacket(sources = []) {
-  return sources.map((source) => ({ id: source.id, title: source.title, domain: source.domain, publishedAt: source.publishedAt, snippet: source.snippet, sourceType: source.sourceType, freshness: source.freshness, quality: source.quality }));
-}
+const AUDIENCE_SECTION_KEYS = ['observedBehaviors', 'motivations', 'pains', 'desires', 'tensions', 'barriers', 'triggers', 'identityDrivers', 'decisionFactors', 'momentsThatMatter', 'hypotheses', 'uncertainties'];
 
 function contextPacket(context, options = {}) {
+  const budget = tighterBudget(CAMPAIGN_PACKET_BUDGET, options.packetBudget || {});
   const prepared = context?.prepared || {};
   const opportunity = prepared.opportunity || context.opportunity || {};
   const research = prepared.research || context.research || {};
@@ -29,6 +34,14 @@ function contextPacket(context, options = {}) {
   const strategy = prepared.strategy || context.strategy || {};
   const brand = prepared.brand || context.brand || {};
   const campaign = context.campaignStrategy || options.existing || {};
+  const combinedSignals = [...(research.marketSignals || []), ...(research.audienceSignals || []), ...(research.culturalSignals || []), ...(research.competitorSignals || []), ...(research.industryDevelopments || []), ...(research.events || []), ...(research.technologySignals || [])];
+  const audienceSections = Object.fromEntries(AUDIENCE_SECTION_KEYS.map((key) => [key, Array.isArray(audience[key]) ? audience[key] : []]));
+  const cited = bindCitedPacket(prepared.sources || research.sources || [], [
+    opportunity.marketSignals, opportunity.audienceSignals, opportunity.risks, opportunity.falsificationSignals,
+    combinedSignals, research.contradictions, research.emergingThemes, ...AUDIENCE_SECTION_KEYS.map((key) => audienceSections[key]),
+  ], budget);
+  const packetIds = cited.packetIds;
+  const itemPacket = (items = [], maxItems = budget.maxItemsPerSection) => bindItemsToPacket(items, packetIds, maxItems, budget);
   return {
     regenerationScope: options.section || 'all',
     strategy: {
@@ -37,28 +50,28 @@ function contextPacket(context, options = {}) {
       audience: strategy.audience,
       market: strategy.market,
       objective: strategy.objective,
-      platforms: strategy.platforms || [],
-      competitors: strategy.competitors || [],
+      platforms: boundStringList(strategy.platforms),
+      competitors: boundStringList(strategy.competitors),
     },
     brand: {
       name: brand.name,
       industry: brand.industry,
       description: brand.description,
       audience: brand.audience,
-      voice: brand.voice || {},
+      voice: boundValue(brand.voice || {}, { maxChars: 120, maxItems: 6, maxKeys: 8, maxDepth: 3 }) || {},
     },
     selectedOpportunity: {
       id: opportunity.id,
       title: opportunity.title,
       type: opportunity.type,
-      oneLineDescription: opportunity.oneLineDescription,
-      strategicThesis: claimPacket(opportunity.strategicThesis),
+      oneLineDescription: clipText(opportunity.oneLineDescription, budget.maxStatementChars),
+      strategicThesis: claimPacket(opportunity.strategicThesis, budget, packetIds),
       marketSignals: itemPacket(opportunity.marketSignals),
       audienceSignals: itemPacket(opportunity.audienceSignals),
-      brandFit: { ...opportunity.brandFit, explanation: clean(opportunity.brandFit?.explanation) },
-      competitiveContext: { ...opportunity.competitiveContext, summary: clean(opportunity.competitiveContext?.summary) },
-      timing: { ...opportunity.timing, explanation: clean(opportunity.timing?.explanation) },
-      whitespace: { ...opportunity.whitespace, statement: clean(opportunity.whitespace?.statement) },
+      brandFit: { ...opportunity.brandFit, explanation: clipText(opportunity.brandFit?.explanation, budget.maxStatementChars) },
+      competitiveContext: { ...opportunity.competitiveContext, summary: clipText(opportunity.competitiveContext?.summary, budget.maxStatementChars) },
+      timing: { ...opportunity.timing, explanation: clipText(opportunity.timing?.explanation, budget.maxStatementChars) },
+      whitespace: { ...opportunity.whitespace, statement: clipText(opportunity.whitespace?.statement, budget.maxStatementChars) },
       risks: itemPacket(opportunity.risks),
       falsificationSignals: itemPacket(opportunity.falsificationSignals),
       confidence: opportunity.confidence,
@@ -67,14 +80,14 @@ function contextPacket(context, options = {}) {
       audienceAnalysisTimestamp: opportunity.audienceAnalysisTimestamp,
     },
     marketIntelligence: {
-      signals: itemPacket([...(research.marketSignals || []), ...(research.audienceSignals || []), ...(research.culturalSignals || []), ...(research.competitorSignals || []), ...(research.industryDevelopments || []), ...(research.events || []), ...(research.technologySignals || [])]),
+      signals: itemPacket(combinedSignals, budget.maxSignalItems),
       contradictions: itemPacket(research.contradictions),
       emergingThemes: itemPacket(research.emergingThemes),
-      sources: sourcePacket(prepared.sources || research.sources || []),
+      sources: cited.packet,
       researchedAt: research.meta?.researchedAt || null,
     },
     audienceIntelligence: {
-      summary: clean(audience.summary),
+      summary: clipText(audience.summary, 300),
       evidenceCoverage: audience.evidenceCoverage || {},
       observedBehaviors: itemPacket(audience.observedBehaviors),
       motivations: itemPacket(audience.motivations),
@@ -92,7 +105,7 @@ function contextPacket(context, options = {}) {
     },
     currentCampaignStrategy: {
       id: campaign.id || null,
-      userOverrides: campaign.userOverrides || {},
+      userOverrides: boundValue(campaign.userOverrides || {}, { maxChars: 200, maxItems: 6, maxKeys: 16, maxDepth: 4 }) || {},
       selectedCreativeTerritoryId: campaign.selectedCreativeTerritoryId || null,
       selectedCreativeTerritory: (campaign.creativeTerritories || []).find((territory) => territory.id === campaign.selectedCreativeTerritoryId) || null,
     },

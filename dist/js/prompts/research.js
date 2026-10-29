@@ -1,18 +1,11 @@
+import { boundSourcePacket, boundStringList } from './budget.js';
+
 function value(input) {
   return String(input || '').trim();
 }
 
-export function buildResearchSynthesisPrompt(context, sources) {
-  const sourcePacket = sources.map((source) => ({
-    id: source.id,
-    title: source.title,
-    domain: source.domain,
-    snippet: source.snippet,
-    publishedAt: source.publishedAt,
-    sourceType: source.sourceType,
-    freshness: source.freshness,
-    quality: source.quality,
-  }));
+export function buildResearchSynthesisPrompt(context, sources, packetBudget) {
+  const sourcePacket = boundSourcePacket(sources, packetBudget);
 
   return {
     system: [
@@ -32,9 +25,9 @@ export function buildResearchSynthesisPrompt(context, sources) {
         idea: value(context.strategy?.idea),
         audience: value(context.strategy?.audience || context.brand?.audience),
         market: value(context.strategy?.market),
-        platform: value(context.strategy?.platforms?.join(', ')),
+        platform: value(boundStringList(context.strategy?.platforms).join(', ')),
         objective: value(context.strategy?.objective),
-        competitors: context.strategy?.competitors || [],
+        competitors: boundStringList(context.strategy?.competitors),
       },
       requiredOutput: {
         researchSummary: 'string',
