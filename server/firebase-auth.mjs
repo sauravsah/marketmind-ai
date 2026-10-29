@@ -106,7 +106,10 @@ async function importFirebaseKey(kid, material) {
 }
 
 export function extractBearerToken(request) {
-  const header = request?.headers?.authorization;
+  const headers = request?.headers;
+  const header = typeof headers?.get === 'function'
+    ? headers.get('authorization')
+    : headers?.authorization ?? headers?.Authorization;
   if (typeof header !== 'string') return null;
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;

@@ -19,6 +19,7 @@ import { buildStrategyContext } from './client/context.js';
 import { assessIntelligence, researchIsStale } from './client/intelligence.js';
 import { applyCampaignOverrides } from './client/campaign.js';
 import { storage } from './storage.js';
+import { collectStrategyBrief } from './strategy-brief.js';
 import { authService, authErrorMessage, authenticatedFetch } from './auth.js';
 import { createWorkspaceRepository, summarizeMigration } from './repository.js';
 import { decideAuthRoute, isProtectedRoute, isVerifiedUser, routeFromHash as mapHashRoute, PUBLIC_ROUTES } from './auth-routes.js';
@@ -614,9 +615,9 @@ function dashboardPage() {
   ];
   return `
     <div class="dashboard-page page-entrance">
-      <div class="page-header dashboard-header"><div><div class="eyebrow">${greeting()} · WORKSPACE</div><h1>What should we<br><em>figure out today?</em></h1><p>Turn what's happening in the market into what your brand should do next.</p></div><button class="button button-primary" type="button" data-route="strategy">${icon('plus', 17)} New strategy</button></div>
+      <div class="page-header dashboard-header"><div><div class="eyebrow">${greeting()} · WORKSPACE</div><h1>What should we<br><em>figure out today?</em></h1><p>Turn what's happening in the market into what your brand should do next.</p></div><button class="button button-primary" type="button" data-route="strategy" data-new-strategy="true">${icon('plus', 17)} New strategy</button></div>
       <section class="hero-panel">
-        <div class="hero-copy"><div class="status-kicker"><span class="status-pulse"></span> YOUR STRATEGY WORKSPACE</div><h2>From a sharp question<br>to a <span>clear direction.</span></h2><p>Start with what's on your mind. MarketMind will keep your brand context close as the intelligence layer grows.</p><button class="text-button" type="button" data-route="strategy">Start a new strategy ${icon('arrow', 16)}</button></div>
+        <div class="hero-copy"><div class="status-kicker"><span class="status-pulse"></span> YOUR STRATEGY WORKSPACE</div><h2>From a sharp question<br>to a <span>clear direction.</span></h2><p>Start with what's on your mind. MarketMind will keep your brand context close as the intelligence layer grows.</p><button class="text-button" type="button" data-route="strategy" data-new-strategy="true">Start a new strategy ${icon('arrow', 16)}</button></div>
         <div class="hero-diagram" aria-label="MarketMind workflow diagram"><div class="diagram-orbit orbit-one"></div><div class="diagram-orbit orbit-two"></div><div class="diagram-core">${icon('sparkles', 24)}<span>YOUR<br>QUESTION</span></div><div class="diagram-node node-top">MARKET<br>SIGNALS</div><div class="diagram-node node-right">AUDIENCE<br>CONTEXT</div><div class="diagram-node node-bottom">NEXT<br>MOVE</div><div class="diagram-line line-a"></div><div class="diagram-line line-b"></div><div class="diagram-line line-c"></div></div>
       </section>
       <section class="dashboard-intelligence" aria-labelledby="dashboard-intelligence-title">
@@ -640,7 +641,7 @@ function competitorTag(competitor) {
 }
 
 function emptyRecent() {
-  return `<div class="empty-state compact"><div class="empty-icon">${icon('sparkles', 20)}</div><div><strong>No strategies yet</strong><p>Your next clear direction starts with a question.</p></div><button class="quiet-button" type="button" data-route="strategy">Create one ${icon('arrow', 14)}</button></div>`;
+  return `<div class="empty-state compact"><div class="empty-icon">${icon('sparkles', 20)}</div><div><strong>No strategies yet</strong><p>Your next clear direction starts with a question.</p></div><button class="quiet-button" type="button" data-route="strategy" data-new-strategy="true">Create one ${icon('arrow', 14)}</button></div>`;
 }
 
 function strategyPage() {
@@ -666,7 +667,7 @@ function strategyPage() {
           <details class="optional-details"><summary><span><span class="eyebrow">OPTIONAL CONTEXT</span><strong>Add context</strong></span><span class="optional-summary">Platform, competitors, and research depth ${icon("chevron", 14)}</span></summary><div class="optional-details-body"><div class="form-grid"><div class="field"><label for="strategy-platform">Primary platform</label><select id="strategy-platform" name="platform"><option value="">Choose a platform</option>${["Instagram", "LinkedIn", "YouTube", "TikTok", "Website", "Multi-platform"].map((item) => `<option ${platform === item ? "selected" : ""}>${item}</option>`).join("")}</select></div><div class="field"><label for="strategy-depth">Research depth</label><select id="strategy-depth" name="researchDepth">${RESEARCH_DEPTH_OPTIONS.map((option) => `<option value="${option.id}" ${strategy.researchDepth === option.id ? "selected" : ""}>${option.label}</option>`).join("")}</select><div class="field-meta"><span id="depth-description">${escapeHtml(RESEARCH_DEPTH_OPTIONS.find((option) => option.id === strategy.researchDepth)?.description || RESEARCH_DEPTH_OPTIONS[1].description)}</span></div></div></div><div class="field"><label for="competitor-entry">Competitors <span class="optional">OPTIONAL</span></label><div class="tag-input"><div id="competitor-tags" class="tag-list">${(strategy.competitors || []).map(competitorTag).join("")}</div><input id="competitor-entry" maxlength="80" placeholder="Add brands for MarketMind to watch..." aria-describedby="competitor-help"></div><div id="competitor-help" class="field-meta"><span>Press Enter or comma after each brand.</span></div></div></div></details>
           <section class="form-card brand-context-summary">${sectionEyebrow("05", "BRAND CONTEXT", "Your existing voice and context will shape the work.")}${state.brand.name || state.brand.description ? `<div class="brand-summary-ready"><div class="context-avatar">${escapeHtml(initials(state.brand.name))}</div><div><strong>${escapeHtml(state.brand.name || "Untitled brand")}</strong><span>${escapeHtml(state.brand.industry || "Industry not set")} · ${escapeHtml(state.brand.voice.tone)}</span></div><button class="quiet-button" type="button" data-route="brand">Manage Brand Voice</button></div>` : `<div class="brand-summary-empty"><div class="empty-icon">${icon("message", 18)}</div><div><strong>No brand context yet</strong><p>Add your brand details so the strategy sounds like you.</p></div><button class="quiet-button" type="button" data-route="brand">Set up brand ${icon("arrow", 14)}</button></div>`}</section>
         </div>
-        <aside class="strategy-aside"><div class="aside-card strategy-brief-aside"><div class="aside-mark">${icon("sparkles", 18)}</div><div class="eyebrow">A USEFUL BRIEF</div><h3>Clarity gives intelligence somewhere to go.</h3><p>MarketMind will use this brief to connect what is happening with what your brand should do next.</p><div class="aside-divider"></div><div class="aside-list"><div><span class="list-check">${icon("check", 13)}</span><span>One clear question</span></div><div><span class="list-check">${icon("check", 13)}</span><span>A defined audience</span></div><div><span class="list-check">${icon("check", 13)}</span><span>A market to understand</span></div></div></div><div class="form-actions"><button class="button button-primary button-wide" type="submit" ${isValid ? "" : "disabled"}>${icon("radar", 17)} Research Market</button><button class="text-button centered" type="button" data-route="dashboard">Save for later</button></div></aside>
+        <aside class="strategy-aside"><div class="aside-card strategy-brief-aside"><div class="aside-mark">${icon("sparkles", 18)}</div><div class="eyebrow">A USEFUL BRIEF</div><h3>Clarity gives intelligence somewhere to go.</h3><p>MarketMind will use this brief to connect what is happening with what your brand should do next.</p><div class="aside-divider"></div><div class="aside-list"><div><span class="list-check">${icon("check", 13)}</span><span>One clear question</span></div><div><span class="list-check">${icon("check", 13)}</span><span>A defined audience</span></div><div><span class="list-check">${icon("check", 13)}</span><span>A market to understand</span></div></div></div><div class="form-actions"><button class="button button-primary button-wide" type="submit" ${isValid ? "" : "disabled"}>${icon("radar", 17)} Research Market</button><button class="text-button centered" type="button" data-action="save-strategy-draft">Save for later</button></div></aside>
       </form>
     </div>`;
 }
@@ -1666,7 +1667,7 @@ function navigate(page) {
 
 function attachGlobalEvents() {
   attachThemeEvents();
-  document.querySelectorAll('[data-route]').forEach((element) => element.addEventListener('click', (event) => { if (element.tagName === 'A') event.preventDefault(); document.body.classList.remove('menu-open'); navigate(element.dataset.route); }));
+  document.querySelectorAll('[data-route]').forEach((element) => element.addEventListener('click', (event) => { if (element.tagName === 'A') event.preventDefault(); document.body.classList.remove('menu-open'); if (element.dataset.newStrategy === 'true') state.strategy = createDefaultStrategy(); navigate(element.dataset.route); }));
   document.querySelectorAll('[data-action="open-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.add('menu-open')));
   document.querySelectorAll('[data-action="close-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.remove('menu-open')));
   document.querySelectorAll('[data-action="help"]').forEach((element) => element.addEventListener('click', () => showToast('The product guide will be available as the workspace expands.', 'info')));
@@ -1743,6 +1744,20 @@ function attachStrategyEvents() {
   competitorEntry.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addCompetitors(); } });
   competitorEntry.addEventListener('blur', addCompetitors);
   attachCompetitorRemoveEvents();
+  document.querySelector('[data-action="save-strategy-draft"]').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    addCompetitors();
+    state.strategy = collectStrategyBrief(state.strategy, new FormData(form));
+    button.disabled = true;
+    const saved = await persistStrategy(state.strategy);
+    button.disabled = false;
+    if (!saved.localSaved && !saved.cloudSaved) {
+      showToast('Draft could not be saved. Keep this page open and try again.', 'error');
+      return;
+    }
+    navigate('dashboard');
+    showToast(saved.cloudSaved ? 'Draft saved to your workspace.' : 'Draft saved on this device only. Cloud sync is unavailable; try saving again when connected.', saved.cloudSaved ? 'success' : 'info');
+  });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = new FormData(form);
@@ -1753,7 +1768,7 @@ function attachStrategyEvents() {
     document.querySelector('#idea-error').textContent = '';
     document.querySelector('#market-error').textContent = '';
     addCompetitors();
-    state.strategy = { ...state.strategy, idea: ideaValue, audience: String(data.get('audience') || '').trim(), platforms: data.get('platform') ? [String(data.get('platform'))] : [], objective: String(data.get('objective') || ''), market: marketValue, researchDepth: String(data.get('researchDepth') || 'balanced'), status: 'draft', createdAt: state.strategy.createdAt || new Date().toISOString(), research: null };
+    state.strategy = { ...collectStrategyBrief(state.strategy, data), status: 'draft', research: null };
     persistStrategy(state.strategy);
     startResearch();
   });
@@ -1797,10 +1812,20 @@ function saveBrand() {
   state.brand = nextBrand; storage.saveBrand(state.brand); persistWorkspace(); showToast('Brand voice saved.', 'success'); render();
 }
 
-function persistStrategy(strategy = state.strategy) {
+async function persistStrategy(strategy = state.strategy) {
   storage.saveStrategy(strategy);
-  state.strategies = storage.getStrategies();
-  if (state.cloud.repository) state.cloud.repository.saveStrategy(strategy).catch(() => showToast('Saved locally. Cloud sync will retry when the workspace is available.', 'info'));
+  const localStrategies = storage.getStrategies();
+  const localSaved = localStrategies.some((item) => item.id === strategy.id && JSON.stringify(item) === JSON.stringify(strategy));
+  // Keep the current session usable even when browser storage is unavailable.
+  state.strategies = [strategy, ...state.strategies.filter((item) => item.id !== strategy.id)];
+  if (!state.cloud.repository) return { localSaved, cloudSaved: false };
+  try {
+    await state.cloud.repository.saveStrategy(strategy);
+    return { localSaved, cloudSaved: true };
+  } catch {
+    if (state.page !== 'strategy') showToast(localSaved ? 'Saved on this device only. Cloud sync is unavailable; try saving again when connected.' : 'Changes could not be saved. Keep this page open and try again.', localSaved ? 'info' : 'error');
+    return { localSaved, cloudSaved: false };
+  }
 }
 
 function persistWorkspace() {
@@ -1833,6 +1858,8 @@ function showToast(message, type = 'info') {
 window.addEventListener('hashchange', () => {
   if (['how-it-works', 'capabilities', 'evidence'].includes(window.location.hash.slice(1))) return;
   const requested = routeFromHash();
+  // navigate() already rendered this route. Avoid wiping its save feedback.
+  if (requested === state.page) return;
   if (requested !== state.page) abortActiveRequests();
   if (state.auth.status === 'loading') return;
   if (isProtectedRoute(requested) && !state.auth.session) {

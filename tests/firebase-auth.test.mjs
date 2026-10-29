@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSign, generateKeyPairSync } from 'node:crypto';
-import { authenticateFirebaseRequest, resetFirebaseCertificateCache, verifyFirebaseIdToken } from '../server/firebase-auth.mjs';
+import { authenticateFirebaseRequest, extractBearerToken, resetFirebaseCertificateCache, verifyFirebaseIdToken } from '../server/firebase-auth.mjs';
 
 const projectId = 'marketmind-test';
 const now = 1_700_000_000;
@@ -51,4 +51,23 @@ test('API authentication distinguishes missing, unverified, and valid sessions',
 test('missing Firebase server configuration is explicit', async () => {
   const result = await authenticateFirebaseRequest({ headers: { authorization: `Bearer ${token()}` } }, { projectId: '' });
   assert.deepEqual(result, { ok: false, status: 503, message: 'Firebase authentication is not configured.' });
+});
+
+
+test('bearer extraction supports Web Headers and Node headers without accepting malformed values', () => {
+  for (const headers of [new Headers({ Authorization: 'Bearer real-token' }), { authorization: 'Bearer real-token' }, { Authorization: 'Bearer real-token' }]) {
+    assert.equal(extractBearerToken({ headers }), 'real-token');
+  }
+  for (const headers of [undefined, new Headers(), new Headers({ authorization: 'Basic abc' }), { authorization: ['Bearer abc'] }, { authorization: 'Bearer   ' }]) {
+    assert.equal(extractBearerToken({ headers }), null);
+  }
+});
+
+test('actual Web Requests still enforce token validity and verified email', async () => {
+  const request = (value) => new Request('https://marketmind.test/api/research/stream', { method: 'POST', headers: value ? { Authorization: `Bearer ${value}` } : {} });
+  const options = { projectId, certificates, now };
+  assert.equal((await authenticateFirebaseRequest(request(), options)).status, 401);
+  assert.equal((await authenticateFirebaseRequest(request('invalid'), options)).status, 401);
+  assert.equal((await authenticateFirebaseRequest(request(token({ email_verified: false })), options)).status, 403);
+  assert.equal((await authenticateFirebaseRequest(request(token()), options)).ok, true);
 });
