@@ -43,19 +43,40 @@ export function buildResearchQueries(context, depth = 'balanced') {
     if (query) queries.push({ id: `query-${queries.length + 1}`, angle, sourceType, query });
   };
 
+  const limit = DEPTH_LIMITS[safeDepth].maxQueries;
+
+  // Reserve the brief's decision, category, market and audience before spending
+  // the remaining budget on competitors or broader discovery angles.
+  add('Idea context', 'industry', [input.idea, input.market]);
   add('Category trends', 'industry', [input.category, 'trends', input.market]);
-  add('Category participation', 'industry', [input.category, 'participation', input.market]);
   add('Current developments', 'news', [input.category, input.market, 'recent developments'], true);
   add('Audience signals', 'audience', [input.audience, input.category, 'behavior', input.market]);
-  add('Audience conversation', 'audience', [input.audience, input.category, 'conversation', input.market]);
-  add('Cultural signals', 'culture', [input.category, 'culture', 'communities', input.market]);
-  add('Relevant events', 'events', [input.category, 'events', input.market], true);
-  add('Technology signals', 'technology', [input.category, 'technology', 'innovation', input.market]);
-  for (const competitor of input.competitors) add('Competitor signals', 'competitor', [competitor, input.category, input.market], true);
-  add('Idea context', 'industry', [input.idea, input.market]);
 
-  const limit = DEPTH_LIMITS[safeDepth].maxQueries;
-  return queries.slice(0, limit).map((item) => ({ ...item, market: input.market, maxResults: DEPTH_LIMITS[safeDepth].maxResultsPerQuery }));
+  // Give each competitor its own query where the depth permits. When names
+  // outnumber the remaining slots, group them instead of silently dropping any.
+  const competitors = input.competitors.filter((name, index, names) => names.findIndex((other) => other.toLowerCase() === name.toLowerCase()) === index);
+  const competitorSlots = Math.min(competitors.length, Math.max(0, limit - queries.length));
+  for (let index = 0; index < competitorSlots; index += 1) {
+    const start = Math.floor(index * competitors.length / competitorSlots);
+    const end = Math.floor((index + 1) * competitors.length / competitorSlots);
+    const group = competitors.slice(start, end);
+    const names = group.length === 1 ? group[0] : `(${group.map((name) => JSON.stringify(name)).join(' OR ')})`;
+    add('Competitor signals', 'competitor', [names, input.category, input.market], true);
+  }
+
+  const discoveryAngles = [
+    ['Audience conversation', 'audience', [input.audience, input.category, 'conversation', input.market]],
+    ['Cultural signals', 'culture', [input.category, 'culture', 'communities', input.market]],
+    ['Relevant events', 'events', [input.category, 'events', input.market], true],
+    ['Technology signals', 'technology', [input.category, 'technology', 'innovation', input.market]],
+    ['Category participation', 'industry', [input.category, 'participation', input.market]],
+  ];
+  for (const [angle, sourceType, parts, recency] of discoveryAngles) {
+    if (queries.length >= limit) break;
+    add(angle, sourceType, parts, recency);
+  }
+
+  return queries.map((item) => ({ ...item, market: input.market, maxResults: DEPTH_LIMITS[safeDepth].maxResultsPerQuery }));
 }
 
 export function normalizeUrl(value) {
