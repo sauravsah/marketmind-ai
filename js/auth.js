@@ -5,6 +5,7 @@ let runtime = null;
 let runtimePromise = null;
 let client = null;
 let clientPromise = null;
+let accountEpoch = 0;
 
 function normalizeRuntime(config = {}) {
   const firebase = config?.firebase || {};
@@ -210,6 +211,7 @@ export const authService = {
       if (!firebase) return { data: { subscription: { unsubscribe() {} } } };
       let initial = true;
       const unsubscribe = firebase.authApi.onAuthStateChanged(firebase.auth, (user) => {
+        accountEpoch += 1;
         callback(initial ? 'INITIAL_SESSION' : (user ? 'SIGNED_IN' : 'SIGNED_OUT'), toSession(user));
         initial = false;
       });
@@ -222,17 +224,27 @@ export const authService = {
 };
 
 export async function authenticatedFetch(input, init = {}) {
+  const epoch = accountEpoch;
+  const user = client?.auth.currentUser;
+  const firebase = await getClient();
+  const assertCurrent = () => {
+    if (init.signal?.aborted || !user || epoch !== accountEpoch || firebase.auth.currentUser !== user) {
+      throw new DOMException('The account changed or the request was cancelled.', 'AbortError');
+    }
+  };
+  assertCurrent();
   const send = (token) => {
+    assertCurrent();
     const headers = new Headers(init.headers || {});
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    headers.set('Authorization', `Bearer ${token}`);
     return fetch(input, { ...init, headers });
   };
-  let token = await authService.getIdToken();
+  let token = await user.getIdToken(false);
   let response = await send(token);
-  // Firebase can keep a stale ID token in a tab after a long session or a
-  // deployment. Refresh once on a 401 so a valid user does not lose a stream.
+  // Retry only for the same signed-in user, never a replacement account.
   if (response.status === 401 && token) {
-    token = await authService.getIdToken(true);
+    assertCurrent();
+    token = await user.getIdToken(true);
     if (token) response = await send(token);
   }
   return response;

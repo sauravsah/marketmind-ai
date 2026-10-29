@@ -79,10 +79,14 @@ function strategyDocumentId(strategyId) {
   return encodeURIComponent(String(strategyId || ''));
 }
 
-export function createWorkspaceRepository({ client, userId, local = storage }) {
+export function createWorkspaceRepository({ client, userId, local = storage, isCurrent = () => true }) {
   if (!client || !userId) throw new Error('A signed-in Firebase client is required.');
   const { db, api } = getFirestoreClient(client);
   let workspaceId = userId;
+
+  function assertCurrent() {
+    if (!isCurrent()) throw new Error('The workspace account changed. Reopen the current workspace before saving.');
+  }
 
   function workspaceRef() {
     return api.doc(db, 'users', userId);
@@ -109,17 +113,23 @@ export function createWorkspaceRepository({ client, userId, local = storage }) {
   }
 
   async function getWorkspace() {
-    return workspaceFromSnapshot(await api.getDoc(workspaceRef()));
+    assertCurrent();
+    const snapshot = await api.getDoc(workspaceRef());
+    assertCurrent();
+    return workspaceFromSnapshot(snapshot);
   }
 
   async function saveWorkspace(workspace) {
+    assertCurrent();
     const payload = serializeWorkspaceDocument(workspace, userId);
     await api.setDoc(workspaceRef(), { ...payload, updatedAt: new Date().toISOString() }, { merge: true });
     return getWorkspace();
   }
 
   async function getStrategies() {
+    assertCurrent();
     const snapshot = await api.getDocs(strategyCollectionRef());
+    assertCurrent();
     return (snapshot?.docs || [])
       .map((document) => copy(document.data()?.payload))
       .filter(Boolean)
@@ -127,6 +137,7 @@ export function createWorkspaceRepository({ client, userId, local = storage }) {
   }
 
   async function saveStrategy(strategy) {
+    assertCurrent();
     if (!strategy?.id) throw new Error('A strategy id is required.');
     const reference = api.doc(strategyCollectionRef(), strategyDocumentId(strategy.id));
     await api.setDoc(reference, { ...serializeStrategyDocument(strategy, userId), updatedAt: new Date().toISOString() }, { merge: true });
@@ -134,9 +145,11 @@ export function createWorkspaceRepository({ client, userId, local = storage }) {
   }
 
   async function migrateLocalData() {
+    assertCurrent();
     const snapshot = local.getLocalSnapshot();
     const remoteWorkspace = (await getWorkspace()) || {};
     const remoteStrategies = await getStrategies();
+    assertCurrent();
     const summary = summarizeMigration(snapshot, remoteWorkspace, remoteStrategies);
     const merged = mergeRemoteWorkspace(remoteWorkspace, { ...snapshot.workspace, brandProfile: snapshot.brand });
     const savedWorkspace = await saveWorkspace(merged);
@@ -146,6 +159,7 @@ export function createWorkspaceRepository({ client, userId, local = storage }) {
       if (!strategy?.id || remoteIds.has(strategy.id)) continue;
       imported.push(await saveStrategy(strategy));
     }
+    assertCurrent();
     local.setMigrationMarker(userId, { completedAt: new Date().toISOString(), importedStrategyCount: imported.length, conflictCount: summary.conflictingStrategyCount });
     return { summary, workspace: savedWorkspace, strategies: [...remoteStrategies, ...imported], imported };
   }

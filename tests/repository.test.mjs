@@ -60,3 +60,12 @@ test('Firestore repository persists one user workspace and nested strategies', a
   assert.equal((await repository.getWorkspace()).workspaceName, 'North Star');
   assert.deepEqual(await repository.getStrategies(), [{ id: 'strategy/one', idea: 'Launch' }]);
 });
+
+test('stale repository rejects delayed reads and prevents later writes or migration marking', async () => {
+ let current = true; let release; let writes = 0; let markers = 0;
+ const api = { doc: () => ({}), collection: () => ({}), getDoc: () => new Promise(ok => { release = () => ok({ exists: () => true, data: () => ({ name: 'A' }) }); }), getDocs: async () => ({ docs: [] }), setDoc: async () => { writes++; } };
+ const repo = createWorkspaceRepository({ client: { db: {}, firestoreApi: api }, userId: 'A', isCurrent: () => current, local: { getLocalSnapshot: () => ({ strategies: [], workspace: {}, brand: {} }), setMigrationMarker: () => { markers++; } } });
+ const read = repo.getWorkspace(); current = false; release(); await assert.rejects(read, /account changed/);
+ await assert.rejects(repo.saveStrategy({ id: 'private-A' }), /account changed/);
+ await assert.rejects(repo.migrateLocalData(), /account changed/); assert.equal(writes, 0); assert.equal(markers, 0);
+});

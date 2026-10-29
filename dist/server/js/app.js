@@ -75,8 +75,14 @@ const activeRequests = new Map();
 function beginRequest(key) {
   activeRequests.get(key)?.abort();
   const controller = new AbortController();
+  controller.account = storage.capture();
+  controller.strategyId = state.strategy?.id;
   activeRequests.set(key, controller);
   return controller;
+}
+
+function isCurrentRequest(controller) {
+  return !controller.signal.aborted && storage.isCurrent(controller.account) && controller.strategyId === state.strategy?.id;
 }
 
 function finishRequest(key, controller) {
@@ -268,27 +274,50 @@ function setAuthFeedback(type, message) {
   render();
 }
 
+function resetAccountState(userId) {
+  abortActiveRequests();
+  storage.setAccount(userId);
+  state.brand = storage.getBrand(createDefaultBrandProfile());
+  state.workspace = storage.getWorkspace();
+  state.strategies = storage.getStrategies().map(normalizeStrategyAudience);
+  state.strategy = createDefaultStrategy();
+  state.cloud = { status: 'idle', repository: null, error: null, userId: null };
+  state.migration = { status: 'idle', summary: null, error: null };
+  state.selectedSource = null;
+  state.researchRun = state.audienceRun = state.opportunityRun = state.campaignRun = null;
+  state.campaignEditorOpen = state.campaignHandoff = false;
+  state.compareTerritoryIds = []; state.compareOpportunityIds = []; state.openOpportunityId = null;
+  state.audienceEditingClaimId = state.audienceValidationClaimId = null;
+  state.betaFeedback = { open: false, sending: false, error: null };
+}
+
 async function loadCloudWorkspace() {
   if (state.cloud.status === 'loading' && state.cloud.userId === state.auth.user?.id) return;
+  const account = storage.capture();
+  const current = () => storage.isCurrent(account);
   state.cloud.status = 'loading';
   state.cloud.userId = state.auth.user?.id || null;
   try {
     const client = await authService.getClient();
+    if (!current()) return;
     if (!client || !state.auth.user?.id) throw new Error('Workspace persistence is not configured yet.');
-    const repository = createWorkspaceRepository({ client, userId: state.auth.user.id });
+    const repository = createWorkspaceRepository({ client, userId: account.userId, isCurrent: current });
     state.cloud.repository = repository;
     let workspace = await repository.getWorkspace();
     const strategies = await repository.getStrategies();
+    if (!current()) return;
     if (!workspace) workspace = await repository.saveWorkspace({ workspaceName: '', defaultMarket: '', defaultAudience: '', defaultPlatform: '', defaultObjective: '', brandProfile: {} });
-    state.workspace = { ...state.workspace, ...workspace };
+    if (!current()) return;
+    state.workspace = { ...storage.getWorkspace(), ...workspace };
     state.brand = { ...createDefaultBrandProfile(), ...(workspace.brandProfile || {}) };
     state.strategies = strategies.map((strategy) => normalizeStrategyAudience(strategy));
     state.strategy = state.strategies[0] ? { ...createDefaultStrategy(), ...state.strategies[0] } : createDefaultStrategy();
     state.cloud.status = 'ready';
     const marker = storage.getMigrationMarker(state.auth.user.id);
-    if (!marker && storage.hasLocalData()) {
-      const snapshot = storage.getLocalSnapshot();
-      state.migration = { status: 'pending', summary: summarizeMigration(snapshot, workspace, strategies), error: null };
+    const snapshot = storage.getLocalSnapshot();
+    const migrationSummary = summarizeMigration(snapshot, workspace, strategies);
+    if (!marker && (migrationSummary.importableStrategyCount || migrationSummary.workspaceFieldCount || migrationSummary.brandFieldCount)) {
+      state.migration = { status: 'pending', summary: migrationSummary, error: null };
       render();
       return;
     }
@@ -298,6 +327,7 @@ async function loadCloudWorkspace() {
     state.auth.redirectTo = null;
     render();
   } catch (error) {
+    if (!current()) return;
     state.cloud.status = 'error';
     state.cloud.repository = null;
     state.cloud.error = error;
@@ -309,6 +339,9 @@ async function loadCloudWorkspace() {
 }
 
 async function applyAuthState(session, user = session?.user || null) {
+  const nextUser = user || session?.user || null;
+  const nextId = session && isVerifiedUser(nextUser) ? nextUser?.id : null;
+  if (storage.capture().userId !== nextId) resetAccountState(nextId);
   state.auth.session = session || null;
   state.auth.user = user || session?.user || null;
   state.auth.feedback = null;
@@ -353,10 +386,12 @@ function attachMigrationEvents() {
     render();
   });
   document.querySelector('[data-migration-action="import"]')?.addEventListener('click', async (event) => {
+    const account = storage.capture();
     event.currentTarget.disabled = true;
     state.migration.error = null;
     try {
       const result = await state.cloud.repository.migrateLocalData();
+      if (!storage.isCurrent(account)) return;
       state.workspace = { ...state.workspace, ...result.workspace };
       state.brand = { ...createDefaultBrandProfile(), ...(result.workspace.brandProfile || {}) };
       state.strategies = result.strategies.map((strategy) => normalizeStrategyAudience(strategy));
@@ -367,6 +402,7 @@ function attachMigrationEvents() {
       render();
       showToast(`Imported ${result.imported.length} strateg${result.imported.length === 1 ? 'y' : 'ies'} into your workspace.`, 'success');
     } catch (error) {
+      if (!storage.isCurrent(account)) return;
       state.migration.error = 'The import could not be completed. Your local backup is unchanged.';
       event.currentTarget.disabled = false;
       render();
@@ -1190,6 +1226,7 @@ async function startResearch() {
         const event = block.match(/event:\s*(\w+)\ndata:\s*(.+)/s);
         if (!event) continue;
         const payload = JSON.parse(event[2]);
+        if (!isCurrentRequest(requestController)) return;
         if (event[1] === 'stage') updateResearchProgress(payload);
         if (event[1] === 'result') result = payload;
         if (event[1] === 'error') streamError = payload.message;
@@ -1197,6 +1234,7 @@ async function startResearch() {
     };
     while (true) { const { value, done } = await reader.read(); if (done) break; consume(value); }
     if (buffer.trim()) consume(new Uint8Array());
+    if (!isCurrentRequest(requestController)) return;
     if (streamError) throw new Error(streamError);
     if (!result) throw new Error('MarketMind received no research result.');
     state.strategy.research = appendResearchRun(state.strategy.research, result);
@@ -1206,7 +1244,7 @@ async function startResearch() {
     render();
     showToast(result.sources?.length ? 'Research completed. Review the evidence trail.' : result.meta?.warnings?.[0] || 'Live market research is temporarily unavailable. Try again shortly.', result.sources?.length ? 'success' : 'info');
   } catch (error) {
-    if (isAbortError(error)) return;
+    if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     const failed = createEmptyResearch();
     failed.meta = { ...failed.meta, depth: state.strategy.researchDepth || 'balanced', warnings: ['Live market research is temporarily unavailable. Try again shortly.'], providerStatus: 'failed' };
     state.strategy.research = appendResearchRun(state.strategy.research, failed, { preservePrevious: Boolean(state.strategy.research?.sources?.length || state.strategy.research?.meta?.researchedAt) });
@@ -1291,6 +1329,7 @@ async function startAudienceAnalysis() {
         const event = block.match(/event:\s*(\w+)\ndata:\s*(.+)/s);
         if (!event) continue;
         const payload = JSON.parse(event[2]);
+        if (!isCurrentRequest(requestController)) return;
         if (event[1] === 'stage') updateAudienceProgress(payload);
         if (event[1] === 'result') result = payload;
         if (event[1] === 'error') streamError = payload.message;
@@ -1298,6 +1337,7 @@ async function startAudienceAnalysis() {
     };
     while (true) { const { value, done } = await reader.read(); if (done) break; consume(value); }
     if (buffer.trim()) consume(new Uint8Array());
+    if (!isCurrentRequest(requestController)) return;
     if (streamError) throw new Error(streamError);
     if (!result) throw new Error('MarketMind received no audience analysis result.');
     state.strategy.audienceInsights = mergeAudienceReviewState(state.strategy.audienceInsights, result);
@@ -1307,7 +1347,7 @@ async function startAudienceAnalysis() {
     render();
     showToast(result.meta?.mode === 'research-light' ? 'Research-light audience intelligence is ready.' : 'Audience intelligence is ready. Review the evidence trail.', 'success');
   } catch (error) {
-    if (isAbortError(error)) return;
+    if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     state.audienceRun = null;
     render();
     showToast(error.message || 'Audience analysis failed.', 'error');
@@ -1361,6 +1401,7 @@ async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
         const event = block.match(/event:\s*(\w+)\ndata:\s*(.+)/s);
         if (!event) continue;
         const payload = JSON.parse(event[2]);
+        if (!isCurrentRequest(requestController)) return;
         if (event[1] === 'stage') updateOpportunityProgress(payload);
         if (event[1] === 'result') result = payload;
         if (event[1] === 'error') streamError = payload.message;
@@ -1368,6 +1409,7 @@ async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
     };
     while (true) { const { value, done } = await reader.read(); if (done) break; consume(value); }
     if (buffer.trim()) consume(new Uint8Array());
+    if (!isCurrentRequest(requestController)) return;
     if (streamError) throw new Error(streamError);
     if (!result) throw new Error('MarketMind received no Opportunity Radar result.');
     state.strategy.opportunityRadar = result;
@@ -1378,7 +1420,7 @@ async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
     render();
     showToast(result.opportunities?.length ? 'Potential opportunities are ready to explore.' : result.meta?.warnings?.[0] || 'More intelligence is needed before opportunities can be identified.', result.opportunities?.length ? 'success' : 'info');
   } catch (error) {
-    if (isAbortError(error)) return;
+    if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     state.opportunityRun = null;
     render();
     showToast(error.message || 'Opportunity Radar failed.', 'error');
@@ -1424,6 +1466,7 @@ async function startCampaignStrategy(section = 'all') {
         const event = block.match(/event:\s*(\w+)\ndata:\s*(.+)/s);
         if (!event) continue;
         const payload = JSON.parse(event[2]);
+        if (!isCurrentRequest(requestController)) return;
         if (event[1] === 'stage') updateCampaignProgress(payload);
         if (event[1] === 'result') result = payload;
         if (event[1] === 'error') streamError = payload.message;
@@ -1431,6 +1474,7 @@ async function startCampaignStrategy(section = 'all') {
     };
     while (true) { const { value, done } = await reader.read(); if (done) break; consume(value); }
     if (buffer.trim()) consume(new Uint8Array());
+    if (!isCurrentRequest(requestController)) return;
     if (streamError) throw new Error(streamError);
     if (!result) throw new Error('MarketMind received no Campaign Strategy result.');
     state.strategy.campaignStrategy = result;
@@ -1440,7 +1484,7 @@ async function startCampaignStrategy(section = 'all') {
     render();
     showToast(result.meta?.status === 'ready' ? 'Campaign strategy is ready to review.' : result.meta?.warnings?.[0] || 'Campaign strategy needs more intelligence.', result.meta?.status === 'ready' ? 'success' : 'info');
   } catch (error) {
-    if (isAbortError(error)) return;
+    if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     state.campaignRun = null;
     render();
     showToast(error.message || 'Campaign strategy failed.', 'error');
@@ -1685,6 +1729,7 @@ function attachGlobalEvents() {
   }));
   document.querySelector('#beta-feedback-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const account = storage.capture();
     const data = new FormData(event.currentTarget);
     state.betaFeedback = { ...state.betaFeedback, sending: true, error: null };
     render();
@@ -1694,11 +1739,13 @@ function attachGlobalEvents() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category: data.get('category'), message: data.get('message'), route: window.location.hash, clientTimestamp: new Date().toISOString() }),
       });
+      if (!storage.isCurrent(account)) return;
       if (!response.ok) throw new Error(await responseErrorMessage(response, 'Feedback could not be sent. Try again shortly.'));
       state.betaFeedback = { open: false, sending: false, error: null };
       render();
       showToast('Thanks — your beta feedback was sent.', 'success');
     } catch (error) {
+      if (!storage.isCurrent(account)) return;
       state.betaFeedback = { ...state.betaFeedback, sending: false, error: isAbortError(error) ? 'Feedback was cancelled. Try again when ready.' : error.message || 'Feedback could not be sent. Try again shortly.' };
       render();
     }
@@ -1745,11 +1792,13 @@ function attachStrategyEvents() {
   competitorEntry.addEventListener('blur', addCompetitors);
   attachCompetitorRemoveEvents();
   document.querySelector('[data-action="save-strategy-draft"]').addEventListener('click', async (event) => {
+    const account = storage.capture();
     const button = event.currentTarget;
     addCompetitors();
     state.strategy = collectStrategyBrief(state.strategy, new FormData(form));
     button.disabled = true;
     const saved = await persistStrategy(state.strategy);
+    if (!storage.isCurrent(account)) return;
     button.disabled = false;
     if (!saved.localSaved && !saved.cloudSaved) {
       showToast('Draft could not be saved. Keep this page open and try again.', 'error');
@@ -1813,24 +1862,31 @@ function saveBrand() {
 }
 
 async function persistStrategy(strategy = state.strategy) {
+  const account = storage.capture();
+  if (!storage.isCurrent(account)) return { localSaved: false, cloudSaved: false };
+  const repository = state.cloud.repository;
   storage.saveStrategy(strategy);
   const localStrategies = storage.getStrategies();
   const localSaved = localStrategies.some((item) => item.id === strategy.id && JSON.stringify(item) === JSON.stringify(strategy));
   // Keep the current session usable even when browser storage is unavailable.
   state.strategies = [strategy, ...state.strategies.filter((item) => item.id !== strategy.id)];
-  if (!state.cloud.repository) return { localSaved, cloudSaved: false };
+  if (!repository) return { localSaved, cloudSaved: false };
   try {
-    await state.cloud.repository.saveStrategy(strategy);
+    await repository.saveStrategy(strategy);
+    if (!storage.isCurrent(account)) return { localSaved, cloudSaved: false };
     return { localSaved, cloudSaved: true };
   } catch {
+    if (!storage.isCurrent(account)) return { localSaved, cloudSaved: false };
     if (state.page !== 'strategy') showToast(localSaved ? 'Saved on this device only. Cloud sync is unavailable; try saving again when connected.' : 'Changes could not be saved. Keep this page open and try again.', localSaved ? 'info' : 'error');
     return { localSaved, cloudSaved: false };
   }
 }
 
 function persistWorkspace() {
-  storage.saveWorkspace(state.workspace);
-  if (state.cloud.repository) state.cloud.repository.saveWorkspace({ ...state.workspace, brandProfile: state.brand }).catch(() => showToast('Saved locally. Cloud sync will retry when the workspace is available.', 'info'));
+  const account = storage.capture();
+  if (!storage.isCurrent(account)) return;
+  const localSaved = storage.saveWorkspace(state.workspace);
+  if (state.cloud.repository) state.cloud.repository.saveWorkspace({ ...state.workspace, brandProfile: state.brand }).catch(() => { if (storage.isCurrent(account)) showToast(localSaved ? 'Saved on this device only. Cloud sync is unavailable; try saving again when connected.' : 'Changes could not be saved. Keep this page open and try again.', localSaved ? 'info' : 'error'); });
 }
 
 function attachWorkspaceEvents() {
