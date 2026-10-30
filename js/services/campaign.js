@@ -352,11 +352,13 @@ export async function generateCampaignStrategy(context = {}, configs = {}, optio
   sendStage(onStage, 2);
   if (!configs.ai?.apiKey) return baseCampaign(context, prepared, 'unavailable', ['MarketMind is temporarily unable to complete this analysis. Please try again.'], now, options.existing);
   sendStage(onStage, 3);
-  const synthesis = await synthesizeCampaignStrategy({ ...context, prepared, campaignStrategy: options.existing || context.campaignStrategy || null, regenerationScope: options.section || 'all' }, configs.ai, { ...options, section: options.section || 'all' });
+  const callStats = {};
+  const synthesis = await synthesizeCampaignStrategy({ ...context, prepared, campaignStrategy: options.existing || context.campaignStrategy || null, regenerationScope: options.section || 'all' }, configs.ai, { ...options, section: options.section || 'all', callStats });
   sendStage(onStage, 4);
   if (!synthesis.candidate) {
     const failed = baseCampaign(context, prepared, 'failed', [synthesis.warning || 'Campaign strategy synthesis failed.'], now, options.existing);
     failed.meta.failureReason = synthesis.reason || 'unknown';
+    failed.meta.providerCalls = callStats;
     return failed;
   }
   sendStage(onStage, 5);
@@ -368,6 +370,7 @@ export async function generateCampaignStrategy(context = {}, configs = {}, optio
     return failed;
   }
   campaign.meta.aiStatus = synthesis.status;
+  campaign.meta.providerCalls = callStats;
   campaign.meta.warnings = [synthesis.warning].filter(Boolean);
   return campaign;
 }

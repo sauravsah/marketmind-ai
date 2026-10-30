@@ -160,11 +160,19 @@ async function requestStructuredJson(config, buildPrompt, callOptions = {}) {
     prompt = buildPrompt(TIGHT_PACKET_BUDGET);
     estimatedInput = estimateTokens(prompt.system) + estimateTokens(prompt.user);
     if (estimatedInput + maxTokens > promptBudget) {
+      if (callOptions.callStats) callOptions.callStats['budget-refused'] = (callOptions.callStats['budget-refused'] || 0) + 1;
       throw failureError('budget-refused'); // refuse safely before spending provider quota
     }
   }
+  // Privacy-safe usage accounting: attempt outcomes as counts/statuses only.
+  // No prompts, keys, headers, or response content are ever recorded.
+  const note = (outcome) => {
+    if (!callOptions.callStats) return;
+    callOptions.callStats.total = (callOptions.callStats.total || 0) + 1;
+    callOptions.callStats[outcome] = (callOptions.callStats[outcome] || 0) + 1;
+  };
   for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt += 1) {
-    if (callOptions.signal?.aborted) throw failureError('aborted');
+    if (callOptions.signal?.aborted) { note('aborted'); throw failureError('aborted'); }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
     try {
@@ -189,21 +197,27 @@ async function requestStructuredJson(config, buildPrompt, callOptions = {}) {
         // Defer safely: if waiting plus another attempt would exceed this
         // call's time budget, fail friendly instead of dying mid-retry.
         if (Date.now() - startedAt + waitMs + attemptTimeoutMs > retryBudgetMs) throw failureError('rate-limited');
+        note('rate-limited');
         await sleep(waitMs);
         continue;
       }
-      if (!response.ok) throw failureError(response.status === 429 ? 'rate-limited' : 'provider-error');
+      if (!response.ok) { const reason = response.status === 429 ? 'rate-limited' : 'provider-error'; note(reason); throw failureError(reason); }
       const payload = await response.json();
       const content = payload?.choices?.[0]?.message?.content;
-      if (!content) throw failureError('invalid-response');
+      if (!content) { note('invalid-response'); throw failureError('invalid-response'); }
       try {
-        return parseStructuredJson(content);
+        const parsed = parseStructuredJson(content);
+        note('ok');
+        return parsed;
       } catch {
+        note('invalid-response');
         throw failureError('invalid-response');
       }
     } catch (error) {
       if (error?.reason) throw error;
-      throw failureError(error?.name === 'AbortError' ? 'timeout' : error?.name === 'SyntaxError' ? 'invalid-response' : 'provider-error');
+      const reason = error?.name === 'AbortError' ? 'timeout' : error?.name === 'SyntaxError' ? 'invalid-response' : 'provider-error';
+      note(reason);
+      throw failureError(reason);
     } finally {
       clearTimeout(timeout);
     }
@@ -222,6 +236,7 @@ function callOptionsFrom(config, options, { temperature, maxTokens }) {
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
     signal: options.signal,
+    callStats: options.callStats,
   };
 }
 

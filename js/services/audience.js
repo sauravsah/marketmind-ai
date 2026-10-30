@@ -165,11 +165,12 @@ export async function analyzeAudience(context, configs = {}, options = {}) {
     return unavailableProfile(context, context.research, 'MarketMind is temporarily unable to complete this analysis. Please try again.');
   }
 
-  const synthesis = await synthesizeAudience({ ...context, research: context.research }, evidence.sources, configs.ai, options);
+  const callStats = {};
+  const synthesis = await synthesizeAudience({ ...context, research: context.research }, evidence.sources, configs.ai, { ...options, callStats });
   stage(onStage, 4);
   if (!synthesis.candidate) {
     const failed = unavailableProfile(context, context.research, synthesis.warning || 'Audience synthesis failed.');
-    failed.meta = { ...(failed.meta || {}), failureReason: synthesis.reason || 'unknown' };
+    failed.meta = { ...(failed.meta || {}), failureReason: synthesis.reason || 'unknown', providerCalls: callStats };
     return failed;
   }
   const profile = baseProfile(context, context.research, 'research-backed', synthesis.status, [synthesis.warning]);
@@ -180,7 +181,7 @@ export async function analyzeAudience(context, configs = {}, options = {}) {
   profile.strategyId = context?.strategy?.id || null;
   profile.researchVersion = context.research?.meta?.researchedAt || null;
   profile.createdAt = new Date().toISOString();
-  profile.meta = { ...(profile.meta || {}), mode: 'research-backed', aiStatus: synthesis.status, warnings: [synthesis.warning].filter(Boolean) };
+  profile.meta = { ...(profile.meta || {}), mode: 'research-backed', aiStatus: synthesis.status, providerCalls: callStats, warnings: [synthesis.warning].filter(Boolean) };
   return profile;
 }
 

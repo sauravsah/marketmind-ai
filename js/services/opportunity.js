@@ -309,11 +309,13 @@ export async function identifyOpportunities(context, configs = {}, options = {})
     return baseRadar(context, readiness, 'unavailable', ['MarketMind is temporarily unable to complete this analysis. Please try again.'], now, variation);
   }
   const stale = researchIsStale(prepared.researchTimestamp, now);
-  const synthesis = await synthesizeOpportunities({ ...context, intelligenceStatus: { research: readiness.researchStatus, audience: readiness.audienceStatus } }, prepared, configs.ai, { ...options, lens: options.lens || 'balanced', variation });
+  const callStats = {};
+  const synthesis = await synthesizeOpportunities({ ...context, intelligenceStatus: { research: readiness.researchStatus, audience: readiness.audienceStatus } }, prepared, configs.ai, { ...options, lens: options.lens || 'balanced', variation, callStats });
   stage(onStage, 5, 'Applying transparent score and confidence assessments.');
   if (!synthesis.candidate) {
     const failed = baseRadar(context, readiness, 'failed', [synthesis.warning || 'Opportunity synthesis failed.'], now, variation);
     failed.meta.failureReason = synthesis.reason || 'unknown';
+    failed.meta.providerCalls = callStats;
     return failed;
   }
   const candidates = Array.isArray(synthesis.candidate) ? synthesis.candidate : synthesis.candidate.opportunities;
@@ -326,7 +328,7 @@ export async function identifyOpportunities(context, configs = {}, options = {})
   radar.lens = options.lens || 'balanced';
   radar.researchTimestamp = prepared.researchTimestamp;
   radar.audienceAnalysisTimestamp = prepared.audienceAnalysisTimestamp;
-  radar.meta = { ...radar.meta, aiStatus: synthesis.status, stale, variation, assessmentLabel: 'AI assessment based on available evidence.', contradictionsConsidered: prepared.contradictions };
+  radar.meta = { ...radar.meta, aiStatus: synthesis.status, stale, variation, assessmentLabel: 'AI assessment based on available evidence.', providerCalls: callStats, contradictionsConsidered: prepared.contradictions };
   return radar;
 }
 

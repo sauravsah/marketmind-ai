@@ -93,6 +93,19 @@ test('controlled AI analysis returns mapped observations and moderate coverage',
   assert.equal(profile.evidenceCoverage.level, 'moderate');
 });
 
+test('analyzeAudience applies the consistency floor and records provider call counts at the call site', async () => {
+  const fetchImpl = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+    summary: 'The supplied evidence points to a social dimension in the audience context.',
+    hypotheses: [{ statement: 'Signing up is completely risk-free for every new customer.', evidenceType: 'inferred', sourceIds: [source.id], confidence: 'low' }],
+  }) } }] }), { status: 200 });
+  const profile = await analyzeAudience({ ...context, research }, { ai: { provider: 'OpenAI-compatible', apiKey: 'test-key' } }, { fetchImpl });
+  assert.equal(profile.meta.providerCalls.total, 1);
+  assert.equal(profile.meta.providerCalls.ok, 1);
+  assert.equal(JSON.stringify(profile.meta.providerCalls).includes('test-key'), false);
+  const flags = profile.meta.claimFlags || [];
+  assert.ok(flags.some((flag) => flag.reason === 'absolute-language'), 'expected an absolute-language flag from the real analyzeAudience path');
+});
+
 test('coverage remains limited when no profile claims are mapped', () => {
   const profile = createEmptyAudienceProfile();
   assert.equal(calculateEvidenceCoverage(research, profile).level, 'limited');
