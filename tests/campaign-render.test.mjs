@@ -158,3 +158,8 @@ test('real applyClaimConsistency offer-premise flag renders through the real cam
   assert.match(html, /asserts an existing offer that no cited source supports/);
   assert.match(html, /not verified for india/i);
 });
+
+test('audience results page renders the real campaignReviewBanner for audience claimFlags', () => {
+  assert.ok(appSource.includes('${campaignReviewBanner(profile)}'), 'audience results template must render the review banner for audience flags');
+  assert.ok(readFileSync(new URL('../js/services/audience.js', import.meta.url), 'utf8').includes('applyAudienceClaimConsistency(profile'), 'audience.js must apply the consistency floor to audience profiles');
+});

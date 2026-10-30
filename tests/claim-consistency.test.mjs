@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyClaimConsistency } from '../js/services/claim-consistency.js';
+import { applyClaimConsistency, applyAudienceClaimConsistency } from '../js/services/claim-consistency.js';
 import { normalizeCampaignStrategy } from '../js/services/campaign.js';
 
 const NOW = new Date('2026-10-30T00:00:00Z');
@@ -384,4 +384,39 @@ test('worldwide wording without restrictions still suppresses (clean global offe
   const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% app discount to convert gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-global'] } });
   applyClaimConsistency(c, globalSources, NOW, { market: 'India' });
   assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('audience floor flags absolute language and self-hedged offer uncertainties stay silent', () => {
+  const profile = {
+    meta: {},
+    hypotheses: [{ statement: 'A free-exchange guarantee makes trying Nike training shoes risk-free.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-discount'] }],
+    uncertainties: [{ statement: 'The 10% discount may not apply to the India storefront.', evidenceType: 'unknown', confidence: 'low', sourceIds: [] }],
+  };
+  applyAudienceClaimConsistency(profile, sources, NOW, { market: 'India' });
+  const flags = profile.meta.claimFlags || [];
+  assert.equal(flags.length, 1, JSON.stringify(flags));
+  assert.equal(flags[0].field, 'hypotheses[0]');
+  assert.equal(flags[0].reason, 'absolute-language');
+});
+
+test('audience floor demotes observed items whose hedge is absent from excerpts and stays idempotent', () => {
+  const profile = {
+    meta: {},
+    observedBehaviors: [{ statement: 'Gym-goers in India may hesitate before premium purchases.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-gym-study'] }],
+  };
+  applyAudienceClaimConsistency(profile, sources, NOW, { market: 'India' });
+  assert.equal(profile.observedBehaviors[0].evidenceType, 'inferred');
+  assert.equal(profile.meta.labelAdjustments.length, 1);
+  applyAudienceClaimConsistency(profile, sources, NOW, { market: 'India' });
+  assert.equal(profile.meta.labelAdjustments, undefined, 'no double-demotion or duplicate records on re-run');
+});
+
+test('audience floor applies the offer-market guard to audience claims', () => {
+  const profile = {
+    meta: {},
+    motivations: [{ statement: 'Shoppers respond to the 10% discount and free exchanges.', evidenceType: 'inferred', confidence: 'medium', sourceIds: ['src-discount'] }],
+  };
+  applyAudienceClaimConsistency(profile, sources, NOW, { market: 'India' });
+  const flags = profile.meta.claimFlags || [];
+  assert.ok(flags.some((f) => f.reason === 'offer-market-unverified' && f.field === 'motivations[0]'), JSON.stringify(flags));
 });

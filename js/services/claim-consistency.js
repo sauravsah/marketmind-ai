@@ -246,26 +246,39 @@ function reviewClaim(field, claim, sources, now, adjustments, flags, context = {
 
 const CLAIM_FIELDS = ['strategicProblem', 'audienceInsight', 'campaignThesis', 'currentPerception', 'desiredPerception', 'brandRole', 'coreMessage', 'creativePrinciple'];
 const CLAIM_LIST_FIELDS = ['supportingMessages', 'contentPillars', 'kpis', 'experiments', 'risks', 'killCriteria'];
+const AUDIENCE_LIST_FIELDS = ['segments', 'observedBehaviors', 'motivations', 'pains', 'desires', 'tensions', 'barriers', 'objections', 'triggers', 'identityDrivers', 'contentBehaviors', 'decisionFactors', 'momentsThatMatter', 'hypotheses', 'uncertainties'];
 
-// Applies the consistency floor to a normalized campaign. Mutates the campaign
-// and records every change in meta.labelAdjustments / meta.claimFlags.
-export function applyClaimConsistency(campaign, sources = [], now = new Date(), context = {}) {
-  if (!campaign || typeof campaign !== 'object') return campaign;
+// Shared core: reviews the given claim fields and records every change in
+// meta.labelAdjustments / meta.claimFlags. Replace, never append: a fresh full
+// check re-derives every flag deterministically, so stale flags from a previous
+// generation drop out and re-running cannot duplicate entries.
+function applyConsistencyFloor(target, sources, now, context, { claims = [], lists = [] }) {
+  if (!target || typeof target !== 'object') return target;
   const adjustments = [];
   const flags = [];
-  for (const field of CLAIM_FIELDS) reviewClaim(field, campaign[field], sources, now, adjustments, flags, context);
-  for (const field of CLAIM_LIST_FIELDS) {
-    (Array.isArray(campaign[field]) ? campaign[field] : []).forEach((item, index) => reviewClaim(`${field}[${index}]`, item, sources, now, adjustments, flags, context));
+  for (const field of claims) reviewClaim(field, target[field], sources, now, adjustments, flags, context);
+  for (const field of lists) {
+    (Array.isArray(target[field]) ? target[field] : []).forEach((item, index) => reviewClaim(`${field}[${index}]`, item, sources, now, adjustments, flags, context));
   }
-  // Replace, never append: a fresh full-campaign check re-derives every flag
-  // deterministically, so stale flags from a previous generation drop out and
-  // re-running on an already-checked campaign cannot duplicate entries.
-  campaign.meta = { ...(campaign.meta || {}) };
-  delete campaign.meta.labelAdjustments;
-  delete campaign.meta.claimFlags;
-  delete campaign.meta.consistencyCheckedAt;
-  if (adjustments.length) campaign.meta.labelAdjustments = adjustments;
-  if (flags.length) campaign.meta.claimFlags = flags;
-  if (adjustments.length || flags.length) campaign.meta.consistencyCheckedAt = now.toISOString();
-  return campaign;
+  target.meta = { ...(target.meta || {}) };
+  delete target.meta.labelAdjustments;
+  delete target.meta.claimFlags;
+  delete target.meta.consistencyCheckedAt;
+  if (adjustments.length) target.meta.labelAdjustments = adjustments;
+  if (flags.length) target.meta.claimFlags = flags;
+  if (adjustments.length || flags.length) target.meta.consistencyCheckedAt = now.toISOString();
+  return target;
+}
+
+// Applies the consistency floor to a normalized campaign.
+export function applyClaimConsistency(campaign, sources = [], now = new Date(), context = {}) {
+  return applyConsistencyFloor(campaign, sources, now, context, { claims: CLAIM_FIELDS, lists: CLAIM_LIST_FIELDS });
+}
+
+// Applies the same floor to a normalized audience profile. Audience items are
+// already evidence-normalized (uncertainties state unknowns, observed items
+// carry citations); the floor adds the deterministic review flags on top and
+// never rewrites claim text.
+export function applyAudienceClaimConsistency(profile, sources = [], now = new Date(), context = {}) {
+  return applyConsistencyFloor(profile, sources, now, context, { lists: AUDIENCE_LIST_FIELDS });
 }
