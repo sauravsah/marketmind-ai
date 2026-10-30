@@ -1089,6 +1089,9 @@ function campaignReviewBanner(campaign) {
     if (flag.reason === 'past-date-framed-as-upcoming' && flag.datedMaterial) {
       return `Review recommended: "${flag.datedMaterial}" appears in the past relative to this strategy's generation date (${flag.checkedAt || 'unknown'}), but a claim frames it as upcoming.`;
     }
+    if (flag.reason === 'absolute-language' && flag.detail) {
+      return `Review recommended: "${flag.detail}" is absolute language that no cited excerpt supports.`;
+    }
     return `Review recommended: ${flag.reason || 'claim consistency flag'}.`;
   });
   return `<div class="campaign-limited-banner">${icon('clock', 15)} <span>${messages.map(escapeHtml).join(' ')} This check is limited and does not verify other claims.</span></div>`;

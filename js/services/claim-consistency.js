@@ -10,6 +10,12 @@
 // the change is auditable, not silent.
 
 const HEDGE_PATTERN = /\b(may|might|could|likely|unlikely|suggests?|tends? to|potential(?:ly)?|appears?|seems?)\b/i;
+// Absolute risk/certainty language ("risk-free", "guaranteed results") asserts
+// what market evidence cannot prove. Flag only - never demote, never rewrite -
+// and only when the absolute phrase is the model's addition, absent from every
+// cited excerpt, so a claim faithfully quoting a source's own wording stays
+// untouched. Fixed list by design - a floor, not entailment.
+const ABSOLUTE_PATTERN = /\b(risk[- ]free|(?:no|zero|without) risk|eliminates? (?:all |any )?(?:purchase )?risk|guaranteed (?:results?|outcomes?|conversions?|sales|returns?)|works? for everyone|always (?:converts?|works?|wins?)|never (?:fails?|loses?))\b/i;
 const UPCOMING_PATTERN = /\b(upcoming|coming soon|will (?:launch|roll out|release|introduce|debut)|soon|next (?:month|quarter|year)|later this year)\b/i;
 // Strong population/geography qualifiers an observed claim may not invent:
 // if the claim asserts one of these and no cited excerpt mentions it, the
@@ -112,6 +118,11 @@ function reviewClaim(field, claim, sources, now, adjustments, flags) {
         claim.confidence = 'low';
       }
     }
+  }
+  // Applies to every evidence type: an absolute is unsupported at any label.
+  const absolute = statement.match(ABSOLUTE_PATTERN);
+  if (absolute && !excerpts.toLowerCase().includes(absolute[0].toLowerCase())) {
+    flags.push({ field, reason: 'absolute-language', detail: absolute[0].toLowerCase(), checkedAt: now.toISOString() });
   }
 }
 

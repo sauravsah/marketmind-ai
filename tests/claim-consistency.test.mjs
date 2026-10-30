@@ -202,3 +202,41 @@ test('temporal flag records datedMaterial and checkedAt for the review banner', 
   assert.equal(c.meta.claimFlags[0].datedMaterial, 'February 2026');
   assert.equal(c.meta.claimFlags[0].checkedAt, NOW.toISOString());
 });
+
+test('absolute risk language with no source support is flagged without changing the label or text (saved risk-free failure)', () => {
+  const c = campaign({ audienceInsight: { statement: 'A free-exchange guarantee makes trying Nike training shoes risk-free.', evidenceType: 'inferred', confidence: 'medium', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'inferred');
+  assert.ok(c.audienceInsight.statement.includes('risk-free'), 'claim text is never rewritten');
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'absolute-language');
+  assert.equal(c.meta.claimFlags[0].detail, 'risk-free');
+  assert.equal(c.meta.claimFlags[0].checkedAt, NOW.toISOString());
+});
+
+test('absolute language quoted from a cited excerpt stays unflagged (source-faithful control)', () => {
+  const honestSources = [{ id: 'src-trial', url: 'https://example.com/trial', title: 'Trial terms', snippet: 'Our trial is completely risk-free for 30 days.' }];
+  const c = campaign({ audienceInsight: { statement: 'The vendor describes its 30-day trial as risk-free.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-trial'] } });
+  applyClaimConsistency(c, honestSources, NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'observed');
+  assert.equal(c.meta.claimFlags, undefined);
+  assert.equal(c.meta.labelAdjustments, undefined);
+});
+
+test('absolute language hidden behind a Unicode non-breaking hyphen is still flagged (dash-evasion regression)', () => {
+  const c = campaign({ audienceInsight: { statement: 'The pilot makes gym sign-up risk\u2011free for members.', evidenceType: 'inferred', confidence: 'medium', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'absolute-language');
+  assert.equal(c.meta.claimFlags[0].detail, 'risk-free');
+});
+
+test('absolute-language flags re-derive cleanly on a re-run (replace semantics)', () => {
+  const c = campaign({ audienceInsight: { statement: 'The pilot is risk-free.', evidenceType: 'inferred', confidence: 'medium', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW);
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags.length, 1);
+  c.audienceInsight = { statement: 'Members may appreciate the free exchange window.', evidenceType: 'inferred', confidence: 'medium', sourceIds: ['src-discount'] };
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags, undefined);
+});
