@@ -8,6 +8,14 @@ export const AI_PHASE_MESSAGE = 'This AI workflow is not connected yet.';
 export const AI_RESEARCH_UNAVAILABLE = 'MarketMind is temporarily unable to complete this analysis. Please try again.';
 const AI_UNAVAILABLE = 'MarketMind is temporarily unable to complete this analysis. Please try again.';
 
+// Coarse, sanitized failure reasons for server-side logs. Never carries
+// provider payloads, request bodies, or key material - safe to log as-is.
+function failureError(reason) {
+  const error = new Error(AI_UNAVAILABLE);
+  error.reason = reason;
+  return error;
+}
+
 // Output caps keep every request inside provider token budgets (free tiers
 // limit combined input + output tokens per minute) and stop runaway bills.
 // Reasoning models spend part of this budget before the visible JSON.
@@ -152,11 +160,11 @@ async function requestStructuredJson(config, buildPrompt, callOptions = {}) {
     prompt = buildPrompt(TIGHT_PACKET_BUDGET);
     estimatedInput = estimateTokens(prompt.system) + estimateTokens(prompt.user);
     if (estimatedInput + maxTokens > promptBudget) {
-      throw new Error(AI_UNAVAILABLE); // refuse safely before spending provider quota
+      throw failureError('budget-refused'); // refuse safely before spending provider quota
     }
   }
   for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt += 1) {
-    if (callOptions.signal?.aborted) throw new Error(AI_UNAVAILABLE);
+    if (callOptions.signal?.aborted) throw failureError('aborted');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
     try {
@@ -180,20 +188,27 @@ async function requestStructuredJson(config, buildPrompt, callOptions = {}) {
         const waitMs = rateLimitWaitMs(response);
         // Defer safely: if waiting plus another attempt would exceed this
         // call's time budget, fail friendly instead of dying mid-retry.
-        if (Date.now() - startedAt + waitMs + attemptTimeoutMs > retryBudgetMs) throw new Error(AI_UNAVAILABLE);
+        if (Date.now() - startedAt + waitMs + attemptTimeoutMs > retryBudgetMs) throw failureError('rate-limited');
         await sleep(waitMs);
         continue;
       }
-      if (!response.ok) throw new Error(AI_UNAVAILABLE);
+      if (!response.ok) throw failureError(response.status === 429 ? 'rate-limited' : 'provider-error');
       const payload = await response.json();
       const content = payload?.choices?.[0]?.message?.content;
-      if (!content) throw new Error(AI_UNAVAILABLE);
-      return parseStructuredJson(content);
+      if (!content) throw failureError('invalid-response');
+      try {
+        return parseStructuredJson(content);
+      } catch {
+        throw failureError('invalid-response');
+      }
+    } catch (error) {
+      if (error?.reason) throw error;
+      throw failureError(error?.name === 'AbortError' ? 'timeout' : error?.name === 'SyntaxError' ? 'invalid-response' : 'provider-error');
     } finally {
       clearTimeout(timeout);
     }
   }
-  throw new Error(AI_UNAVAILABLE);
+  throw failureError('rate-limited');
 }
 
 function callOptionsFrom(config, options, { temperature, maxTokens }) {
@@ -215,8 +230,8 @@ export async function synthesizeResearch(context, sources, config, options = {})
   try {
     const candidate = await requestStructuredJson(config, (packetBudget) => buildResearchSynthesisPrompt(context, sources, packetBudget), callOptionsFrom(config, options, { temperature: 0.1, maxTokens: DEFAULT_MAX_OUTPUT_TOKENS }));
     return { candidate, status: 'verified', warning: null };
-  } catch {
-    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE };
+  } catch (error) {
+    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE, reason: error?.reason || 'unknown' };
   }
 }
 
@@ -225,8 +240,8 @@ export async function synthesizeAudience(context, sources, config, options = {})
   try {
     const candidate = await requestStructuredJson(config, (packetBudget) => buildAudienceAnalysisPrompt(context, sources, packetBudget), callOptionsFrom(config, options, { temperature: 0.1, maxTokens: DEFAULT_MAX_OUTPUT_TOKENS }));
     return { candidate, status: 'verified', warning: null };
-  } catch {
-    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE };
+  } catch (error) {
+    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE, reason: error?.reason || 'unknown' };
   }
 }
 
@@ -235,8 +250,8 @@ export async function synthesizeOpportunities(context, evidence, config, options
   try {
     const candidate = await requestStructuredJson(config, (packetBudget) => buildOpportunityPrompt(context, evidence, options.lens || 'balanced', options.variation || 0, packetBudget), callOptionsFrom(config, options, { temperature: 0.15, maxTokens: DEFAULT_MAX_OUTPUT_TOKENS }));
     return { candidate, status: 'verified', warning: null };
-  } catch {
-    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE };
+  } catch (error) {
+    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE, reason: error?.reason || 'unknown' };
   }
 }
 
@@ -256,7 +271,7 @@ export async function synthesizeCampaignStrategy(context, config, options = {}) 
   try {
     const candidate = await requestStructuredJson(config, buildPrompt, callOptionsFrom(config, options, { temperature: 0.15, maxTokens: CAMPAIGN_MAX_OUTPUT_TOKENS }));
     return { candidate, status: 'verified', warning: null };
-  } catch {
-    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE };
+  } catch (error) {
+    return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE, reason: error?.reason || 'unknown' };
   }
 }

@@ -311,7 +311,11 @@ export async function identifyOpportunities(context, configs = {}, options = {})
   const stale = researchIsStale(prepared.researchTimestamp, now);
   const synthesis = await synthesizeOpportunities({ ...context, intelligenceStatus: { research: readiness.researchStatus, audience: readiness.audienceStatus } }, prepared, configs.ai, { ...options, lens: options.lens || 'balanced', variation });
   stage(onStage, 5, 'Applying transparent score and confidence assessments.');
-  if (!synthesis.candidate) return baseRadar(context, readiness, 'failed', [synthesis.warning || 'Opportunity synthesis failed.'], now, variation);
+  if (!synthesis.candidate) {
+    const failed = baseRadar(context, readiness, 'failed', [synthesis.warning || 'Opportunity synthesis failed.'], now, variation);
+    failed.meta.failureReason = synthesis.reason || 'unknown';
+    return failed;
+  }
   const candidates = Array.isArray(synthesis.candidate) ? synthesis.candidate : synthesis.candidate.opportunities;
   const normalized = (Array.isArray(candidates) ? candidates : []).map((item, index) => normalizeOpportunity(item, index, { ...context, stale }, { ...prepared, readiness })).filter(Boolean);
   const previous = Array.isArray(context?.previousOpportunities) ? context.previousOpportunities : [];

@@ -166,7 +166,11 @@ export async function analyzeAudience(context, configs = {}, options = {}) {
 
   const synthesis = await synthesizeAudience({ ...context, research: context.research }, evidence.sources, configs.ai, options);
   stage(onStage, 4);
-  if (!synthesis.candidate) return unavailableProfile(context, context.research, synthesis.warning || 'Audience synthesis failed.');
+  if (!synthesis.candidate) {
+    const failed = unavailableProfile(context, context.research, synthesis.warning || 'Audience synthesis failed.');
+    failed.meta = { ...(failed.meta || {}), failureReason: synthesis.reason || 'unknown' };
+    return failed;
+  }
   const profile = baseProfile(context, context.research, 'research-backed', synthesis.status, [synthesis.warning]);
   const validated = validateAudienceProfile(synthesis.candidate, evidence.sources, { research: context.research });
   Object.assign(profile, validated);

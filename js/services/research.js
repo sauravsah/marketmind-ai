@@ -281,7 +281,11 @@ export async function researchMarket(context, configs = {}, options = {}) {
 
   onStage({ id: 'synthesizing', label: 'Synthesizing findings', sources: sources.length });
   const synthesis = await synthesizeResearch(context, sources, configs.ai, options);
-  if (!synthesis.candidate) return sourceOnlyOutput(sources, depth, queries.length, 'verified', synthesis.status, [synthesis.warning].filter(Boolean), searchResult.failures);
+  if (!synthesis.candidate) {
+    const failed = sourceOnlyOutput(sources, depth, queries.length, 'verified', synthesis.status, [synthesis.warning].filter(Boolean), searchResult.failures);
+    failed.meta.failureReason = synthesis.reason || 'unknown';
+    return failed;
+  }
 
   const output = validateResearchOutput(synthesis.candidate, sources);
   const usedSourceIds = new Set(allSignals(output).flatMap((signal) => signal.sourceIds));

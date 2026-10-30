@@ -75,7 +75,7 @@ function sseResponse(run, fallbackMessage, trace) {
       Promise.resolve()
         .then(() => run(send))
         .then((result) => {
-          console.log(JSON.stringify({ event: 'api_request', requestId: trace.requestId, route: trace.route, status: 200, durationMs: Date.now() - trace.startedAt, providerState: result?.meta?.providerStatus || result?.meta?.status || 'completed', user: trace.user }));
+          console.log(JSON.stringify({ event: 'api_request', requestId: trace.requestId, route: trace.route, status: 200, durationMs: Date.now() - trace.startedAt, providerState: result?.meta?.providerStatus || result?.meta?.status || 'completed', failureReason: result?.meta?.failureReason, user: trace.user }));
           send('result', result);
         })
         .catch((error) => {

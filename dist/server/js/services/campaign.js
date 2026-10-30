@@ -352,11 +352,19 @@ export async function generateCampaignStrategy(context = {}, configs = {}, optio
   sendStage(onStage, 3);
   const synthesis = await synthesizeCampaignStrategy({ ...context, prepared, campaignStrategy: options.existing || context.campaignStrategy || null, regenerationScope: options.section || 'all' }, configs.ai, { ...options, section: options.section || 'all' });
   sendStage(onStage, 4);
-  if (!synthesis.candidate) return baseCampaign(context, prepared, 'failed', [synthesis.warning || 'Campaign strategy synthesis failed.'], now, options.existing);
+  if (!synthesis.candidate) {
+    const failed = baseCampaign(context, prepared, 'failed', [synthesis.warning || 'Campaign strategy synthesis failed.'], now, options.existing);
+    failed.meta.failureReason = synthesis.reason || 'unknown';
+    return failed;
+  }
   sendStage(onStage, 5);
   const candidate = Array.isArray(synthesis.candidate) ? synthesis.candidate[0] : synthesis.candidate;
   const campaign = normalizeCampaignStrategy(candidate, context, { prepared, existing: options.existing, section: options.section });
-  if (!campaign) return baseCampaign(context, prepared, 'failed', ['MarketMind returned an incomplete or invalid campaign strategy.'], now, options.existing);
+  if (!campaign) {
+    const failed = baseCampaign(context, prepared, 'failed', ['MarketMind returned an incomplete or invalid campaign strategy.'], now, options.existing);
+    failed.meta.failureReason = 'invalid-response';
+    return failed;
+  }
   campaign.meta.aiStatus = synthesis.status;
   campaign.meta.warnings = [synthesis.warning].filter(Boolean);
   return campaign;
