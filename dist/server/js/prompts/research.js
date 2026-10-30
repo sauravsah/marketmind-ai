@@ -1,4 +1,5 @@
 import { boundSourcePacket, boundStringList } from './budget.js';
+import { EVIDENCE_DISCIPLINE_RULES } from './evidence-rules.js';
 
 function value(input) {
   return String(input || '').trim();
@@ -14,6 +15,7 @@ export function buildResearchSynthesisPrompt(context, sources, packetBudget) {
       'Never invent sources, URLs, dates, statistics, quotes, or current events.',
       'Every factual signal must include one or more sourceIds from the supplied packet.',
       'Separate evidence from MarketMind interpretation and state uncertainty explicitly.',
+      ...EVIDENCE_DISCIPLINE_RULES,
       'If evidence is insufficient, say "Insufficient evidence" rather than guessing.',
       'Return valid JSON only. Do not wrap JSON in markdown.',
     ].join(' '),

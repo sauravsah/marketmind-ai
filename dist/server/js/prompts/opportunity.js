@@ -1,4 +1,5 @@
 import { PACKET_BUDGET, bindCitedPacket, bindItemsToPacket, boundStringList, clipText } from './budget.js';
+import { EVIDENCE_DISCIPLINE_RULES } from './evidence-rules.js';
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -53,6 +54,7 @@ export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced'
       'Identify strategic territories worth exploring from the supplied strategy, brand, market intelligence, audience intelligence, and source packet.',
       'An opportunity requires a meaningful intersection of market signal, audience need or tension, brand relevance, timing, and competitive context when available.',
       'Use only the supplied evidence. Clearly distinguish observed, inferred, and hypothesis content.',
+      ...EVIDENCE_DISCIPLINE_RULES,
       'Only audience claims in the supplied reviewedSignals packet are eligible audience context. Do not use audience claims from strategy context or any omitted audience field.',
       'Use language such as potential opportunity, evidence-backed direction, strategic hypothesis, and worth validating.',
       'Never say an opportunity will definitely work, is guaranteed, or has a probability of success.',

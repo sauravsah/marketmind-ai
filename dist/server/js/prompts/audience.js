@@ -1,4 +1,5 @@
 import { boundSourcePacket, boundStringList } from './budget.js';
+import { EVIDENCE_DISCIPLINE_RULES } from './evidence-rules.js';
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -29,6 +30,7 @@ export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behav
       'Never invent sources, source IDs, quotes, survey results, statistics, demographics, or customer stories.',
       'Never stereotype people by age, geography, occupation, identity, or life stage.',
       'Do not present a plausible marketing convention as an observation.',
+      ...EVIDENCE_DISCIPLINE_RULES,
       'Every observed item must cite one or more sourceIds from the packet.',
       'Inferred items must be framed as interpretation from cited observations.',
       'Hypotheses are testable possibilities and must remain hypotheses.',

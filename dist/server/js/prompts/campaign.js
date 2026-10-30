@@ -1,4 +1,5 @@
 import { PACKET_BUDGET, bindCitedPacket, bindItemsToPacket, boundStringList, boundValue, clipText, tighterBudget } from './budget.js';
+import { EVIDENCE_DISCIPLINE_RULES } from './evidence-rules.js';
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -117,6 +118,7 @@ function guardrails() {
     'You are MarketMind, a careful senior campaign strategist.',
     'Use the selected opportunity as the only strategic starting point and connect every major claim to supplied market, audience, opportunity, or brand evidence.',
     'Treat interpretations as interpretations and strategic directions as hypotheses. Preserve evidenceType, confidence, uncertainty, and sourceIds.',
+    ...EVIDENCE_DISCIPLINE_RULES,
     'Every sourceId must match a supplied source packet. Never invent sources, statistics, customer quotes, personas, competitor behavior, urgency, or benchmarks.',
     'Respect the supplied Brand Voice Studio tone, personality, preferred words, avoided words, examples, and strictness. Keep the strategy strategic; do not write production assets.',
     'Do not generate captions, posts, ad copy, video scripts, image prompts, shot lists, storyboards, content calendars, music recommendations, or publishing plans.',
