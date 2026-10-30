@@ -186,8 +186,9 @@ function escapeHtml(value = '') {
 // Model output sometimes carries internal citation tokens like "(source-szp8ew)"
 // in the statement text. Citations render separately as source chips mapped from
 // sourceIds, so display strips the raw tokens without touching the stored claim
+// Token separators accept ASCII hyphen and the Unicode dashes models emit (U+2010-2015, U+2212).
 // or its sourceIds mapping. Display-only - saved output is never mutated.
-const SOURCE_TOKEN_RUN = /\s*\(\s*source-[a-z0-9]+(?:\s*[,;]\s*source-[a-z0-9]+)*\s*\)/gi;
+const SOURCE_TOKEN_RUN = /\s*\(\s*source[-‐-―−][a-z0-9]+(?:\s*[,;]\s*source[-‐-―−][a-z0-9]+)*\s*\)/gi;
 function stripSourceTokens(value = '') {
   return String(value).replace(SOURCE_TOKEN_RUN, '').replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim();
 }

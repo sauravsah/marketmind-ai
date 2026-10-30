@@ -19,7 +19,7 @@ function extractFunction(name) {
 
 function loadCampaignClaim() {
   const escapeHtml = new Function(`${extractFunction('escapeHtml')}\nreturn escapeHtml;`)();
-  const tokenConst = 'const SOURCE_TOKEN_RUN = /\\s*\\(\\s*source-[a-z0-9]+(?:\\s*[,;]\\s*source-[a-z0-9]+)*\\s*\\)/gi;';
+  const tokenConst = appSource.match(/const SOURCE_TOKEN_RUN = \/.*\/gi;/)[0];
   return new Function(
     'escapeHtml',
     `${tokenConst}\n${extractFunction('stripSourceTokens')}\n${extractFunction('campaignClaim')}\nreturn campaignClaim;`,
@@ -37,6 +37,14 @@ test('source-token stripping keeps real parenthetical prose and citation-free te
   const campaignClaim = loadCampaignClaim();
   assert.equal(campaignClaim({ statement: 'Members save 10% (app only) on full-price styles.' }), 'Members save 10% (app only) on full-price styles.');
   assert.equal(campaignClaim({ statement: 'Plain claim without tokens.' }), 'Plain claim without tokens.');
+});
+
+test('source tokens with Unicode dashes (U+2010-2015, U+2212) are stripped like ASCII hyphens', () => {
+  const campaignClaim = loadCampaignClaim();
+  const out = campaignClaim({ statement: 'Because Nike\u2019s training shoes are priced at \u20B913,995 (source\u2011szp8ew) and first-time gym\u2011goers are price-sensitive, they hesitate (source\u20144ozw8q, source\u2212qxuqd4).' });
+  assert.equal(/source[\u2010-\u2015\u2212-][a-z0-9]+/.test(out), false, `no token survives: ${out}`);
+  assert.ok(out.includes('priced at \u20B913,995 and'), `sentence intact: ${out}`);
+  assert.ok(out.includes('price-sensitive, they hesitate.'), `tail intact: ${out}`);
 });
 
 test('claim of only a source token falls back instead of rendering empty', () => {
