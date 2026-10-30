@@ -1,4 +1,5 @@
 import { synthesizeCampaignStrategy } from './ai.js';
+import { applyClaimConsistency } from './claim-consistency.js';
 import {
   CAMPAIGN_CONFIDENCE,
   CAMPAIGN_OBJECTIVES,
@@ -313,6 +314,7 @@ export function normalizeCampaignStrategy(raw, context, options = {}) {
   campaign.sourceIds = sourceIdsFrom(unique([...campaign.sourceIds, ...nestedSourceIds(campaign)]), knownIds);
   const overridden = applyCampaignOverrides(campaign, campaign.userOverrides);
   overridden.confidence = calculateCampaignConfidence(overridden, { ...context, prepared });
+  applyClaimConsistency(overridden, prepared.sources, options.now instanceof Date ? options.now : new Date());
   overridden.meta.assessmentLabel = 'MarketMind assessment based on available intelligence. Not a success probability.';
   const hasStrategicOutput = Boolean(overridden.strategicProblem.statement || overridden.audienceInsight.statement || overridden.campaignThesis.statement || overridden.campaignConcept?.bigIdea || overridden.creativeTerritories.length || overridden.platformStrategy.length);
   if (!hasStrategicOutput) return null;
@@ -359,7 +361,7 @@ export async function generateCampaignStrategy(context = {}, configs = {}, optio
   }
   sendStage(onStage, 5);
   const candidate = Array.isArray(synthesis.candidate) ? synthesis.candidate[0] : synthesis.candidate;
-  const campaign = normalizeCampaignStrategy(candidate, context, { prepared, existing: options.existing, section: options.section });
+  const campaign = normalizeCampaignStrategy(candidate, context, { prepared, existing: options.existing, section: options.section, now });
   if (!campaign) {
     const failed = baseCampaign(context, prepared, 'failed', ['MarketMind returned an incomplete or invalid campaign strategy.'], now, options.existing);
     failed.meta.failureReason = 'invalid-response';

@@ -57,3 +57,34 @@ test('opportunity evidence buttons tolerate empty and unknown source ids', () =>
   assert.equal(opportunityEvidenceButtons([{ sourceIds: ['missing'] }], []), '');
   assert.equal(opportunityEvidenceButtons(undefined, undefined), '');
 });
+
+test('campaign review banner renders a visible warning for flagged claims', () => {
+  const bannerSrc = extractFunction('campaignReviewBanner');
+  const escapeHtml = (value = '') => String(value).replace(/</g, '&lt;');
+  const icon = () => '';
+  const campaignReviewBanner = new Function(
+    'escapeHtml',
+    'icon',
+    `${bannerSrc}\nreturn campaignReviewBanner;`,
+  )(escapeHtml, icon);
+  const html = campaignReviewBanner({
+    meta: { claimFlags: [{ reason: 'past-date-framed-as-upcoming', datedMaterial: 'February 2026', checkedAt: '2026-10-30' }] },
+  });
+  assert.match(html, /Review recommended/);
+  assert.match(html, /February 2026/);
+  assert.match(html, /does not verify other claims/);
+});
+
+test('campaign review banner renders nothing for unflagged campaigns', () => {
+  const bannerSrc = extractFunction('campaignReviewBanner');
+  const escapeHtml = (value = '') => String(value);
+  const icon = () => '';
+  const campaignReviewBanner = new Function(
+    'escapeHtml',
+    'icon',
+    `${bannerSrc}\nreturn campaignReviewBanner;`,
+  )(escapeHtml, icon);
+  assert.equal(campaignReviewBanner({}), '');
+  assert.equal(campaignReviewBanner({ meta: { claimFlags: [] } }), '');
+  assert.equal(campaignReviewBanner(undefined), '');
+});
