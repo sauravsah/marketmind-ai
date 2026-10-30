@@ -240,3 +240,148 @@ test('absolute-language flags re-derive cleanly on a re-run (replace semantics)'
   applyClaimConsistency(c, sources, NOW);
   assert.equal(c.meta.claimFlags, undefined);
 });
+
+test('offer claim citing an offer source that never mentions the target market is flagged (saved discount-geography failure)', () => {
+  const c = campaign({ campaignThesis: { statement: 'A pilot that couples the 10% app discount with a free-exchange guarantee will convert first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-discount', 'src-india-change'] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  const flags = c.meta.claimFlags.map((f) => f.reason);
+  assert.ok(flags.includes('offer-market-unverified'), `expected offer-market-unverified, got ${flags}`);
+  const flag = c.meta.claimFlags.find((f) => f.reason === 'offer-market-unverified');
+  assert.equal(flag.field, 'campaignThesis');
+  assert.match(flag.detail, /India/);
+  assert.equal(c.campaignThesis.evidenceType, 'hypothesis', 'flag only, label untouched');
+  assert.ok(c.campaignThesis.statement.includes('10% app discount'), 'text never rewritten');
+});
+
+test('composite offer claim is flagged for the aspect no India source covers (facet laundering)', () => {
+  const facetSources = [
+    { id: 'src-discount', url: 'https://www.nike.com/help/a/product-discount', title: "How Can I Get Nike's Best Deals?", snippet: 'First, we offer a 10% discount to eligible shoppers. Download or open the Nike App.' },
+    { id: 'src-india-exchange', url: 'https://www.nike.com/in/help/a/nike-india-changes', title: 'Nike India Changes Coming February 2026 | Nike Help', snippet: 'Nike India Changes Coming February 2026. Free exchanges on the same product purchased on Nike.in.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'A pilot that couples a 10% discount with a free-exchange guarantee will increase conversion among first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-discount', 'src-india-exchange'] } });
+  applyClaimConsistency(c, facetSources, NOW, { market: 'India' });
+  const flags = (c.meta.claimFlags || []).filter((f) => f.reason === 'offer-market-unverified');
+  assert.equal(flags.length, 1, `expected exactly one offer-market flag, got ${JSON.stringify(c.meta.claimFlags)}`);
+  assert.match(flags[0].detail, /price reduction/, 'the uncovered discount aspect is named');
+  assert.ok(!/free returns or exchanges/.test(flags[0].detail), 'the India-covered exchange aspect is not flagged');
+});
+
+test('exchange-only claim citing an India exchange source stays silent (facet control)', () => {
+  const facetSources = [
+    { id: 'src-india-exchange', url: 'https://www.nike.com/in/help/a/nike-india-changes', title: 'Nike India Changes Coming February 2026 | Nike Help', snippet: 'Nike India Changes Coming February 2026. Free exchanges on the same product purchased on Nike.in.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'A free-exchange guarantee will lower the barrier for first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-india-exchange'] } });
+  applyClaimConsistency(c, facetSources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('offer claim is clean when a cited offer source does cover the market (positive control)', () => {
+  const indiaSources = [
+    { id: 'src-app10', url: 'https://www.nike.com/in/t/dunk-low-shoes', title: 'Nike Dunk Low. Nike IN', snippet: 'Enjoy 10% Off On The Nike App. Use: APP10. Nike Official Online Store India.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% app discount to convert first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-app10'] } });
+  applyClaimConsistency(c, indiaSources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('explicitly global offer suppresses the geography flag', () => {
+  const globalSources = [
+    { id: 'src-global', url: 'https://example.com/offer', title: 'Member offer', snippet: 'Members get a 10% discount worldwide on the app.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% app discount to convert first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-global'] } });
+  applyClaimConsistency(c, globalSources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('cited source with a region marker for a different market is flagged', () => {
+  const auSources = [
+    { id: 'src-au', url: 'https://www.nike.com/au/promo-terms-and-conditions', title: 'Nike Promotional Terms', snippet: '10% off Nike members first purchase on Nike.com.au or Nike App only.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% member discount to convert first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-au'] } });
+  applyClaimConsistency(c, auSources, NOW, { market: 'India' });
+  const reasons = c.meta.claimFlags.map((f) => f.reason);
+  assert.ok(reasons.includes('source-region-mismatch'), `expected source-region-mismatch, got ${reasons}`);
+  assert.ok(reasons.includes('offer-market-unverified'), `expected offer-market-unverified, got ${reasons}`);
+});
+
+test('unmarked global-default URL with market mention in excerpt is not a region mismatch', () => {
+  const c = campaign({ brandRole: { statement: 'Nike supports runners through the Vegam Run launch.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-vegam'] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('no market context means no geography checks (backward compatible)', () => {
+  const c = campaign({ campaignThesis: { statement: 'A pilot that couples the 10% app discount with exchanges will convert gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('offer recommendation without cited sources is not flagged', () => {
+  const c = campaign({ campaignThesis: { statement: 'We should test a 10% discount for first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: [] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('uncited existing-offer premise is flagged (16:01 thesis shape without sources)', () => {
+  const c = campaign({ campaignThesis: { statement: 'A pilot that couples the 10% app discount with a free-exchange guarantee will convert first-time gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: [] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-premise-unsourced');
+  assert.match(c.meta.claimFlags[0].detail, /not verified for India/);
+});
+
+test('explicitly existing offer wording without sources is flagged even without market context', () => {
+  const c = campaign({ campaignThesis: { statement: 'The pilot leverages the existing 10% app discount to drive conversion.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: [] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-premise-unsourced');
+  assert.equal(c.meta.claimFlags[0].detail, 'existing offer asserted without a cited source');
+});
+
+test('cited sources that never mention the asserted existing offer still flag the premise', () => {
+  const c = campaign({ campaignThesis: { statement: 'The pilot leverages the existing 10% app discount for price-sensitive gym-goers.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-gym-study'] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-premise-unsourced');
+});
+
+test('claim that already hedges the offer market fit is never flagged (uncertainty stated)', () => {
+  const c = campaign({ strategicProblem: { statement: 'The 10% discount may not apply to the India storefront, leaving the incentive unclear.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('directive fields never raise offer guards (kill criteria cite no premises)', () => {
+  const c = campaign({ killCriteria: [{ statement: 'Reconsider when the discount underperforms the control group.', evidenceType: 'unknown', confidence: 'low', sourceIds: [] }] });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('worldwide wording does not suppress the flag when excerpts carry regional restrictions', () => {
+  const restricted = [
+    { id: 'src-rest', url: 'https://example.com/terms', title: 'Offer terms', snippet: 'Members get a 10% discount worldwide. Only available in selected countries; participating stores only.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% member discount to convert gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-rest'] } });
+  applyClaimConsistency(c, restricted, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-market-unverified');
+});
+
+test('worldwide wording does not suppress the flag when excerpts carry an expiry', () => {
+  const expiring = [
+    { id: 'src-exp', url: 'https://example.com/offer', title: 'Limited offer', snippet: 'Members get a 10% discount worldwide. Offer expires 7 November 2026.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% member discount to convert gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-exp'] } });
+  applyClaimConsistency(c, expiring, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-market-unverified');
+});
+
+test('worldwide wording without restrictions still suppresses (clean global offer)', () => {
+  const globalSources = [
+    { id: 'src-global', url: 'https://example.com/offer', title: 'Member offer', snippet: 'Members get a 10% discount worldwide on the app.' },
+  ];
+  const c = campaign({ campaignThesis: { statement: 'The pilot uses the existing 10% app discount to convert gym-goers in India.', evidenceType: 'hypothesis', confidence: 'low', sourceIds: ['src-global'] } });
+  applyClaimConsistency(c, globalSources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+});

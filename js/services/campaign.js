@@ -314,7 +314,7 @@ export function normalizeCampaignStrategy(raw, context, options = {}) {
   campaign.sourceIds = sourceIdsFrom(unique([...campaign.sourceIds, ...nestedSourceIds(campaign)]), knownIds);
   const overridden = applyCampaignOverrides(campaign, campaign.userOverrides);
   overridden.confidence = calculateCampaignConfidence(overridden, { ...context, prepared });
-  applyClaimConsistency(overridden, prepared.sources, options.now instanceof Date ? options.now : new Date());
+  applyClaimConsistency(overridden, prepared.sources, options.now instanceof Date ? options.now : new Date(), { market: prepared.strategy?.market });
   overridden.meta.assessmentLabel = 'MarketMind assessment based on available intelligence. Not a success probability.';
   const hasStrategicOutput = Boolean(overridden.strategicProblem.statement || overridden.audienceInsight.statement || overridden.campaignThesis.statement || overridden.campaignConcept?.bigIdea || overridden.creativeTerritories.length || overridden.platformStrategy.length);
   if (!hasStrategicOutput) return null;

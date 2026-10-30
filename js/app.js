@@ -1101,6 +1101,15 @@ function campaignReviewBanner(campaign) {
     if (flag.reason === 'absolute-language' && flag.detail) {
       return `Review recommended: "${flag.detail}" is absolute language that no cited excerpt supports.`;
     }
+    if (flag.reason === 'offer-market-unverified' && flag.detail) {
+      return `Review recommended: this claim relies on an offer that no cited source verifies for the target market (${flag.detail}).`;
+    }
+    if (flag.reason === 'offer-premise-unsourced' && flag.detail) {
+      return `Review recommended: this claim asserts an existing offer that no cited source supports (${flag.detail}).`;
+    }
+    if (flag.reason === 'source-region-mismatch' && flag.detail) {
+      return `Review recommended: a cited source is region-specific (${flag.detail}).`;
+    }
     return `Review recommended: ${flag.reason || 'claim consistency flag'}.`;
   });
   return `<div class="campaign-limited-banner">${icon('clock', 15)} <span>${messages.map(escapeHtml).join(' ')} This check is limited and does not verify other claims.</span></div>`;

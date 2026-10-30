@@ -93,3 +93,60 @@ for (const point of STRIPPED_RENDER_POINTS) {
     assert.ok(appSource.includes(point), `js/app.js must contain: ${point}`);
   });
 }
+
+test('real applyClaimConsistency offer-market flag renders through the real campaignReviewBanner end to end', async () => {
+  const { applyClaimConsistency } = await import('../js/services/claim-consistency.js');
+  const sources = [
+    { id: 'src-discount', url: 'https://www.nike.com/help/a/product-discount', title: "How Can I Get Nike's Best Deals?", snippet: 'First, we offer a 10% discount to eligible shoppers. Download or open the Nike App.' },
+  ];
+  const campaign = {
+    meta: {},
+    campaignThesis: {
+      statement: 'A pilot that couples the 10% app discount with free exchanges will convert first-time gym-goers in India.',
+      evidenceType: 'hypothesis',
+      confidence: 'low',
+      sourceIds: ['src-discount'],
+    },
+  };
+  applyClaimConsistency(campaign, sources, new Date('2026-10-30T05:00:00Z'), { market: 'India' });
+  assert.equal(campaign.meta.claimFlags?.length, 1);
+  assert.equal(campaign.meta.claimFlags[0].reason, 'offer-market-unverified');
+
+  const escapeHtml = new Function(`${extractFunction('escapeHtml')}\nreturn escapeHtml;`)();
+  const campaignReviewBanner = new Function(
+    'escapeHtml',
+    'icon',
+    `${extractFunction('campaignReviewBanner')}\nreturn campaignReviewBanner;`,
+  )(escapeHtml, () => '');
+  const html = campaignReviewBanner(campaign);
+  assert.match(html, /Review recommended/);
+  assert.match(html, /no cited source verifies for the target market/);
+  assert.match(html, /india/i);
+});
+
+test('real applyClaimConsistency offer-premise flag renders through the real campaignReviewBanner end to end', async () => {
+  const { applyClaimConsistency } = await import('../js/services/claim-consistency.js');
+  const campaign = {
+    meta: {},
+    campaignThesis: {
+      statement: 'A pilot that couples the 10% app discount with free exchanges will convert first-time gym-goers in India.',
+      evidenceType: 'hypothesis',
+      confidence: 'low',
+      sourceIds: [],
+    },
+  };
+  applyClaimConsistency(campaign, [], new Date('2026-10-30T05:00:00Z'), { market: 'India' });
+  assert.equal(campaign.meta.claimFlags?.length, 1);
+  assert.equal(campaign.meta.claimFlags[0].reason, 'offer-premise-unsourced');
+
+  const escapeHtml = new Function(`${extractFunction('escapeHtml')}\nreturn escapeHtml;`)();
+  const campaignReviewBanner = new Function(
+    'escapeHtml',
+    'icon',
+    `${extractFunction('campaignReviewBanner')}\nreturn campaignReviewBanner;`,
+  )(escapeHtml, () => '');
+  const html = campaignReviewBanner(campaign);
+  assert.match(html, /Review recommended/);
+  assert.match(html, /asserts an existing offer that no cited source supports/);
+  assert.match(html, /not verified for india/i);
+});
