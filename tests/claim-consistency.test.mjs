@@ -168,3 +168,37 @@ test('stale flags from a previous generation drop out when the claim is fixed', 
   assert.equal(c.meta.claimFlags, undefined, 'stale flag must not survive a clean re-check');
   assert.equal(c.meta.consistencyCheckedAt, undefined);
 });
+
+test('non-breaking hyphens in the statement no longer evade qualifier detection (live unicode failure)', () => {
+  const c = campaign({ audienceInsight: { statement: 'Because first‑time gym‑goers compare gym‑shoe options online and seek performance‑enhancing footwear, they are price‑sensitive and often unaware of Nike models.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-gym-study'] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'inferred');
+  assert.equal(c.meta.labelAdjustments[0].reason, 'qualifier-not-in-sources');
+});
+
+test('non-breaking hyphens and spaces in excerpts still satisfy an ASCII statement qualifier', () => {
+  const unicodeSources = [{ id: 'src-uni', url: 'https://example.com/study', title: 'Beginner study', snippet: 'First‑time gym‑goers in India report time constraints and price sensitivity.' }];
+  const c = campaign({ audienceInsight: { statement: 'First-time gym-goers in India report time constraints and price sensitivity.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-uni'] } });
+  applyClaimConsistency(c, sources.concat(unicodeSources), NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'observed', 'unicode excerpt text must count as qualifier support');
+});
+
+test('matching normalization never mutates stored claim text or source excerpts', () => {
+  const statement = 'Because first‑time gym‑goers compare options online, they may hesitate.';
+  const snippet = 'First‑time gym‑goers report time constraints.';
+  const originalStatement = statement.slice();
+  const originalSnippet = snippet.slice();
+  const uniSources = [{ id: 'src-uni2', url: 'https://example.com/x', title: 'T', snippet }];
+  const c = campaign({ audienceInsight: { statement, evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-uni2'] } });
+  applyClaimConsistency(c, uniSources, NOW);
+  assert.equal(c.audienceInsight.statement, originalStatement);
+  assert.equal(uniSources[0].snippet, originalSnippet);
+});
+
+test('temporal flag records datedMaterial and checkedAt for the review banner', () => {
+  const c = campaign({ campaignThesis: { statement: 'The upcoming February 2026 profile changes will bring new gym-goers.', evidenceType: 'hypothesis', confidence: 'medium', sourceIds: [] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].datedMaterial, 'February 2026');
+  assert.equal(c.meta.claimFlags[0].checkedAt, NOW.toISOString());
+});

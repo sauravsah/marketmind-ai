@@ -30,6 +30,16 @@ const QUALIFIER_PATTERNS = [
 ];
 const MONTH_INDEX = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
 
+const DASH_VARIANTS = /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g;
+const SPACE_VARIANTS = /[\u00A0\u2007\u2009\u202F]/g;
+
+// Matching-only normalization: Unicode dash/space variants become their ASCII
+// equivalents so token checks see the words claims and sources actually use.
+// Never written back - stored claim text and source excerpts stay untouched.
+function normalizeForMatch(value) {
+  return String(value || '').replace(DASH_VARIANTS, '-').replace(SPACE_VARIANTS, ' ');
+}
+
 function excerptText(sources, sourceIds) {
   const wanted = new Set(sourceIds || []);
   return (sources || []).filter((source) => wanted.has(source?.id)).map((source) => `${source.title || ''} ${source.snippet || ''}`).join(' ');
@@ -72,30 +82,31 @@ function futureDatesIn(text, now) {
 // Reviews one normalized claim in place. Returns adjustment/flag records.
 function reviewClaim(field, claim, sources, now, adjustments, flags) {
   if (!claim || typeof claim !== 'object' || !claim.statement) return;
-  const excerpts = excerptText(sources, claim.sourceIds);
+  const statement = normalizeForMatch(claim.statement);
+  const excerpts = normalizeForMatch(excerptText(sources, claim.sourceIds));
   if (claim.evidenceType === 'observed') {
-    const hedge = claim.statement.match(HEDGE_PATTERN);
+    const hedge = statement.match(HEDGE_PATTERN);
     // An observed claim may faithfully report a source's own uncertainty; only
     // demote when the hedged word is the model's addition, absent from excerpts.
     if (hedge && !excerpts.toLowerCase().includes(hedge[0].toLowerCase())) {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'hedged-language', detail: hedge[0].toLowerCase() });
       claim.evidenceType = 'inferred';
     }
-    const missing = claim.evidenceType === 'observed' ? missingQualifiers(claim.statement, excerpts) : [];
+    const missing = claim.evidenceType === 'observed' ? missingQualifiers(statement, excerpts) : [];
     if (missing.length) {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'qualifier-not-in-sources', detail: missing.join(', ') });
       claim.evidenceType = 'inferred';
     }
   }
-  if (UPCOMING_PATTERN.test(claim.statement)) {
+  if (UPCOMING_PATTERN.test(statement)) {
     // Flag only when the dated material is unambiguously in the past: an old
     // source can legitimately announce a future event, so any future date in
     // the same claim or its excerpts suppresses the flag. Source publication
     // dates are never used - a past publication date is not a past event date.
-    const combined = `${claim.statement} ${excerpts}`;
-    const dated = futureDatesIn(combined, now) ? [] : [...new Set([...pastDatesIn(claim.statement, now), ...pastDatesIn(excerpts, now)])];
+    const combined = `${statement} ${excerpts}`;
+    const dated = futureDatesIn(combined, now) ? [] : [...new Set([...pastDatesIn(statement, now), ...pastDatesIn(excerpts, now)])];
     if (dated.length) {
-      flags.push({ field, reason: 'past-date-framed-as-upcoming', detail: dated.join(', ') });
+      flags.push({ field, reason: 'past-date-framed-as-upcoming', detail: dated.join(', '), datedMaterial: dated.join(', '), checkedAt: now.toISOString() });
       if (claim.confidence !== 'low') {
         adjustments.push({ field, from: claim.confidence, to: 'low', reason: 'past-date-framed-as-upcoming' });
         claim.confidence = 'low';

@@ -17,6 +17,20 @@ function extractFunction(name) {
   throw new Error(`unterminated function ${name}`);
 }
 
+
+function extractConst(name) {
+  const start = appSource.indexOf(`const ${name} = `);
+  assert.notEqual(start, -1, `js/app.js must define const ${name} in module scope`);
+  const braceStart = appSource.indexOf('{', start);
+  let depth = 0;
+  for (let i = braceStart; i < appSource.length; i += 1) {
+    if (appSource[i] === '{') depth += 1;
+    if (appSource[i] === '}') depth -= 1;
+    if (depth === 0) return `${appSource.slice(start, i + 1)};`;
+  }
+  throw new Error(`unterminated const ${name}`);
+}
+
 function loadOpportunityEvidenceButtons() {
   const uniqueSrc = extractFunction('unique');
   const buttonsSrc = extractFunction('opportunityEvidenceButtons');
@@ -87,4 +101,48 @@ test('campaign review banner renders nothing for unflagged campaigns', () => {
   assert.equal(campaignReviewBanner({}), '');
   assert.equal(campaignReviewBanner({ meta: { claimFlags: [] } }), '');
   assert.equal(campaignReviewBanner(undefined), '');
+});
+
+test('real applyClaimConsistency output renders through the real campaignReviewBanner end to end', async () => {
+  const { applyClaimConsistency } = await import('../js/services/claim-consistency.js');
+  const campaign = {
+    meta: {},
+    campaignThesis: {
+      statement: 'The upcoming February 2026 profile changes will bring new gym-goers to the Nike app.',
+      evidenceType: 'hypothesis',
+      confidence: 'medium',
+      sourceIds: [],
+    },
+  };
+  const now = new Date('2026-10-30T05:00:00Z');
+  applyClaimConsistency(campaign, [], now);
+
+  // Guard the exact metadata path the banner depends on.
+  assert.ok(Array.isArray(campaign.meta.claimFlags) && campaign.meta.claimFlags.length === 1);
+  const flag = campaign.meta.claimFlags[0];
+  assert.equal(flag.reason, 'past-date-framed-as-upcoming');
+  assert.equal(flag.datedMaterial, 'February 2026');
+  assert.equal(flag.checkedAt, '2026-10-30T05:00:00.000Z');
+
+  // Render with the real functions extracted from js/app.js - no hand-built flag fixture.
+  const escapeHtml = new Function(`${extractFunction('escapeHtml')}\nreturn escapeHtml;`)();
+  const iconsSrc = extractConst('icons');
+  const icon = new Function(`${iconsSrc}\n${extractFunction('icon')}\nreturn icon;`)();
+  const campaignReviewBanner = new Function(
+    'escapeHtml',
+    'icon',
+    `${extractFunction('campaignReviewBanner')}\nreturn campaignReviewBanner;`,
+  )(escapeHtml, icon);
+  const html = campaignReviewBanner(campaign);
+
+  assert.match(html, /Review recommended/);
+  assert.match(html, /February 2026/);
+  assert.match(html, /2026-10-30T05:00:00\.000Z/);
+  assert.match(html, /does not verify other claims/);
+  assert.match(html, /campaign-limited-banner/);
+  // The dynamic fields reach the HTML only through escapeHtml.
+  const malicious = { meta: { claimFlags: [{ reason: 'past-date-framed-as-upcoming', datedMaterial: '<img src=x onerror=alert(1)>', checkedAt: '2026-10-30' }] } };
+  const escaped = campaignReviewBanner(malicious);
+  assert.ok(!escaped.includes('<img src=x'));
+  assert.match(escaped, /&lt;img src=x/);
 });
