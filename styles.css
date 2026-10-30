@@ -1573,8 +1573,15 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .pillar-row,
 :root[data-theme="light"] .measure-row,
 :root[data-theme="light"] .risk-row { border-bottom-color: var(--border-soft); }
-:root[data-theme="light"] .emotion-list span { border-color: var(--border); color: var(--accent-soft); }
+:root[data-theme="light"] .emotion-list span { border-color: var(--border); color: #4a6a24; }
 :root[data-theme="light"] .platform-check { border-color: var(--border); color: var(--text-secondary); }
+:root[data-theme="light"] .evidence-observed { color: #4a6a24; }
+:root[data-theme="light"] .evidence-inferred { color: #8a6420; }
+:root[data-theme="light"] .evidence-hypothesis { color: #5d6591; }
+:root[data-theme="light"] .evidence-unknown { color: #5f6559; }
+:root[data-theme="light"] .campaign-claim .eyebrow,
+:root[data-theme="light"] .campaign-page .section-heading .eyebrow { color: #4a6a24; }
+:root[data-theme="light"] .campaign-page .opportunity-evidence-buttons button { color: #4a6a24; }
 
 @media (max-width: 900px) {
   .decision-map-heading { grid-template-columns: 1fr; gap: 28px; }

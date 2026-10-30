@@ -30,3 +30,33 @@ for (const selector of OVERRIDDEN) {
 test('dark theme campaign claim color is untouched', () => {
   assert.match(css, /\.campaign-claim > p \{ margin: 13px 0 0; color: #c3c7bb;/);
 });
+
+const LIGHT_BADGE_SELECTORS = ['.evidence-observed', '.evidence-inferred', '.evidence-hypothesis', '.evidence-unknown'];
+for (const selector of LIGHT_BADGE_SELECTORS) {
+  test(`light theme gives ${selector} a readable text color`, () => {
+    const pattern = new RegExp(`:root\\[data-theme="light"\\][^{]*\\${selector}[^{]*\\{[^}]*color:\\s*#[0-9a-f]{6}`, 'i');
+    assert.match(css, pattern, `${selector} must get an explicit light-theme color`);
+  });
+}
+
+// Light-mode contrast regression: claim-card eyebrows, section eyebrows, and
+// source chips inherit var(--accent) (#afd16d in the light theme), which is
+// roughly 1.7:1 on white cards. The light theme must darken them.
+const DARKENED = [
+  '.campaign-claim .eyebrow',
+  '.campaign-page .section-heading .eyebrow',
+  '.campaign-page .opportunity-evidence-buttons button',
+];
+
+for (const selector of DARKENED) {
+  test(`light theme darkens ${selector} for contrast`, () => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&');
+    const pattern = new RegExp(`:root\\[data-theme="light"\\][^{]*${escaped}[^{]*\\{[^}]*color:\\s*#4a6a24`);
+    assert.ok(pattern.test(css), `missing light contrast override for ${selector}`);
+  });
+}
+
+test('light theme darkens emotion chips for contrast', () => {
+  const pattern = /:root\[data-theme="light"\][^{]*\.emotion-list span[^{]*\{[^}]*color:\s*#4a6a24/;
+  assert.ok(pattern.test(css), 'missing light contrast override for .emotion-list span');
+});
