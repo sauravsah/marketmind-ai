@@ -1546,6 +1546,36 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .decision-map-node:hover { background: #fff; }
 :root[data-theme="light"] .decision-map-arrow { background: var(--public-bg); }
 
+/* Campaign studio surfaces use var(--surface) - white in the light theme - so
+   the dark palette's hardcoded pale text colors need light-theme values. */
+:root[data-theme="light"] .campaign-header p,
+:root[data-theme="light"] .campaign-overview-header p { color: var(--text-secondary); }
+:root[data-theme="light"] .campaign-page .section-heading h2 { color: var(--text-primary); }
+:root[data-theme="light"] .campaign-page .section-heading p { color: var(--text-secondary); }
+:root[data-theme="light"] .campaign-setup-form h2 { color: var(--text-primary); }
+:root[data-theme="light"] .campaign-claim > p { color: var(--text-primary); }
+:root[data-theme="light"] .supporting-message strong,
+:root[data-theme="light"] .pillar-row strong,
+:root[data-theme="light"] .measure-row strong,
+:root[data-theme="light"] .risk-row strong,
+:root[data-theme="light"] .channel-role-card h3 { color: var(--text-primary); }
+:root[data-theme="light"] .pillar-row span,
+:root[data-theme="light"] .measure-row span,
+:root[data-theme="light"] .risk-row p,
+:root[data-theme="light"] .channel-role-card p,
+:root[data-theme="light"] .channel-role-card > span { color: var(--text-secondary); }
+:root[data-theme="light"] .supporting-message span,
+:root[data-theme="light"] .campaign-support-row small,
+:root[data-theme="light"] .pillar-row small,
+:root[data-theme="light"] .risk-row small,
+:root[data-theme="light"] .channel-role-card strong { color: var(--muted); }
+:root[data-theme="light"] .supporting-message,
+:root[data-theme="light"] .pillar-row,
+:root[data-theme="light"] .measure-row,
+:root[data-theme="light"] .risk-row { border-bottom-color: var(--border-soft); }
+:root[data-theme="light"] .emotion-list span { border-color: var(--border); color: var(--accent-soft); }
+:root[data-theme="light"] .platform-check { border-color: var(--border); color: var(--text-secondary); }
+
 @media (max-width: 900px) {
   .decision-map-heading { grid-template-columns: 1fr; gap: 28px; }
   .decision-map-nodes { grid-template-columns: repeat(5, minmax(180px, 1fr)); overflow-x: auto; padding: 4px 2px 16px; scrollbar-width: thin; }
