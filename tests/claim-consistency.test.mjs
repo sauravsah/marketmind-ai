@@ -351,10 +351,30 @@ test('claim that already hedges the offer market fit is never flagged (uncertain
   assert.equal(c.meta.claimFlags, undefined);
 });
 
-test('directive fields never raise offer guards (kill criteria cite no premises)', () => {
+test('measurement field asserting an uncited existing offer is flagged (no field-name exemption)', () => {
   const c = campaign({ killCriteria: [{ statement: 'Reconsider when the discount underperforms the control group.', evidenceType: 'unknown', confidence: 'low', sourceIds: [] }] });
   applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].field, 'killCriteria[0]');
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-premise-unsourced');
+});
+
+test('measurement wording that explicitly names the offer as the proposal under test stays silent', () => {
+  const c = campaign({
+    experiments: [{ statement: 'A/B test the proposed 10% discount against no incentive for first-time buyers.', evidenceType: 'unknown', confidence: 'medium', sourceIds: [] }],
+    kpis: [{ statement: 'Conversion lift of the test offer versus control.', evidenceType: 'unknown', confidence: 'medium', sourceIds: [] }],
+    killCriteria: [{ statement: 'Kill the pilot discount if it underperforms the control group.', evidenceType: 'unknown', confidence: 'low', sourceIds: [] }],
+  });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
   assert.equal(c.meta.claimFlags, undefined);
+});
+
+test('KPI presupposing an offer verified only outside the target market is flagged', () => {
+  const c = campaign({ kpis: [{ statement: 'Conversion lift from the 10% discount among first-time gym-goers.', evidenceType: 'unknown', confidence: 'medium', sourceIds: ['src-discount'] }] });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].field, 'kpis[0]');
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-market-unverified');
 });
 
 test('worldwide wording does not suppress the flag when excerpts carry regional restrictions', () => {
@@ -419,4 +439,74 @@ test('audience floor applies the offer-market guard to audience claims', () => {
   applyAudienceClaimConsistency(profile, sources, NOW, { market: 'India' });
   const flags = profile.meta.claimFlags || [];
   assert.ok(flags.some((f) => f.reason === 'offer-market-unverified' && f.field === 'motivations[0]'), JSON.stringify(flags));
+});
+
+test('inferential synthesis labeled observed is demoted (saved Nike Metcon run failure)', () => {
+  const c = campaign({ audienceInsight: { statement: 'Because they want performance-oriented, stylish shoes but balance premium style with price sensitivity, they lack clear guidance and fear high cost; therefore they need low-risk incentives to try Nike Metcon.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'inferred');
+  assert.equal(c.meta.labelAdjustments.length, 1);
+  assert.equal(c.meta.labelAdjustments[0].reason, 'inferential-framing');
+  assert.equal(c.meta.labelAdjustments[0].detail, 'therefore');
+});
+
+test('a source\'s own inferential connective does not make the claim observed (conservative calibration)', () => {
+  // Repeating a source's "therefore" still reports a conclusion, not an
+  // observation - no excerpts exemption for inferential markers.
+  const srcs = [{ id: 'src-adherence', url: 'https://example.com/adherence', title: 'Onboarding study', snippet: 'Participants improved adherence; therefore supervised onboarding is recommended.' }];
+  const c = campaign({ audienceInsight: { statement: 'The study finds participants improved adherence and therefore recommends supervised onboarding.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-adherence'] } });
+  applyClaimConsistency(c, srcs, NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'inferred');
+  assert.equal(c.meta.labelAdjustments[0].reason, 'inferential-framing');
+});
+
+test('directive copy presupposing an uncited existing offer is flagged (saved Nike Metcon run failure)', () => {
+  const c = campaign({ differentiation: { notDo: 'Rely solely on heritage messaging.', doInstead: 'Highlight the concrete 10% discount and free-exchange guarantee, paired with beginner-focused guidance on shoe selection.', evidenceType: 'observed', confidence: 'medium', sourceIds: [] } });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].field, 'differentiation.doInstead');
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-premise-unsourced');
+});
+
+test('instruction copy citing an offer source outside the target market is flagged', () => {
+  const c = campaign({ platformStrategy: [{ platform: 'Instagram', role: 'Retarget cart abandoners with the 10% discount', contentType: 'Reels', audienceBehavior: 'Scroll', primaryKpi: 'CTR', sourceIds: ['src-discount'] }] });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].field, 'platformStrategy[0].role');
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-market-unverified');
+});
+
+test('hypothetical offer proposals in copy fields stay silent (hypothesis preserved)', () => {
+  const c = campaign({
+    differentiation: { notDo: '', doInstead: 'Test whether a 10% discount lifts first-purchase conversion before scaling spend.', sourceIds: [] },
+    ctaStrategy: { primary: 'See if the Metcon fits your training.', secondary: '', rationale: 'A discount could work here.', sourceIds: [] },
+    campaignConcept: { campaignName: 'First Step', bigIdea: 'Make the first gym shoe decision feel guided.', sourceIds: [] },
+  });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags, undefined);
+  assert.equal(c.meta.labelAdjustments, undefined);
+});
+
+test('absolute language in consumer-facing CTA copy is flagged', () => {
+  const c = campaign({ ctaStrategy: { primary: 'Start risk-free today.', secondary: '', rationale: '', sourceIds: [] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].field, 'ctaStrategy.primary');
+  assert.equal(c.meta.claimFlags[0].reason, 'absolute-language');
+});
+
+test('inferential insight carrying Unicode-dash source tokens is demoted (real 17:22 run statement)', () => {
+  const c = campaign({ audienceInsight: { statement: 'Because they want performance‑oriented, stylish shoes (source‑algafh, source‑ppl263) but balance premium style with price sensitivity (source‑ppl263, source‑4ozw8q), they lack clear guidance and fear high cost; therefore they need low‑risk incentives to try Nike Metcon.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-discount'] } });
+  applyClaimConsistency(c, sources, NOW);
+  assert.equal(c.audienceInsight.evidenceType, 'inferred');
+  assert.equal(c.meta.labelAdjustments[0].reason, 'inferential-framing');
+});
+
+test('"Save 10%" supporting copy citing a source that never mentions the target market is flagged (saved Nike Metcon run failure)', () => {
+  const c = campaign({ supportingMessages: [{ statement: 'Save 10% instantly on the Metcon you need to power your workouts.', evidenceType: 'observed', confidence: 'medium', sourceIds: ['src-discount'] }] });
+  applyClaimConsistency(c, sources, NOW, { market: 'India' });
+  assert.equal(c.meta.claimFlags.length, 1);
+  assert.equal(c.meta.claimFlags[0].field, 'supportingMessages[0]');
+  assert.equal(c.meta.claimFlags[0].reason, 'offer-market-unverified');
+  assert.match(c.meta.claimFlags[0].detail, /India/);
 });

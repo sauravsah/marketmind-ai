@@ -10,6 +10,10 @@
 // the change is auditable, not silent.
 
 const HEDGE_PATTERN = /\b(may|might|could|likely|unlikely|suggests?|tends? to|potential(?:ly)?|appears?|seems?)\b/i;
+// Inferential glue ("therefore they need", "as a result") is the model's synthesis,
+// not an observation. Unlike hedges there is no source exemption: a source's own
+// "therefore" is still a conclusion, so repeating it reports an inference.
+const INFERENTIAL_PATTERN = /\b(therefore|thus|hence|as a result|this means|which means|which suggests|implies that)\b/i;
 // Absolute risk/certainty language ("risk-free", "guaranteed results") asserts
 // what market evidence cannot prove. Flag only - never demote, never rewrite -
 // and only when the absolute phrase is the model's addition, absent from every
@@ -22,8 +26,16 @@ const ABSOLUTE_PATTERN = /\b(risk[- ]free|(?:no|zero|without) risk|eliminates? (
 // cited sources that mention an offer place it in the strategy's target market,
 // the market fit of that premise is unverified - flag only, never demote or
 // rewrite. A source explicitly describing a global offer suppresses the flag.
-const OFFER_PATTERN = /\b\d{1,2}\s?%\s*(?:off|discount)\b|\bdiscounts?\b|\bpromo(?:tion|tional|tions)?\b|\bcoupons?\b|\bvouchers?\b|\bfree (?:shipping|delivery|returns?|exchanges?|trials?)\b|\boffer\b|\bdeals?\b/i;
+const OFFER_PATTERN = /\b\d{1,2}\s?%\s*(?:off|discount)\b|\bsave\s?\d{1,2}\s?%|\bsavings\b|\bdiscounts?\b|\bpromo(?:tion|tional|tions)?\b|\bcoupons?\b|\bvouchers?\b|\bfree (?:shipping|delivery|returns?|exchanges?|trials?)\b|\boffer\b|\bdeals?\b/i;
 const GLOBAL_MARKET_PATTERN = /\b(global(?:ly)?|worldwide|international(?:ly)?|all (?:markets|countries|regions))\b/i;
+// Text-bearing copy/instruction fields checked for existence-framed offer
+// premises and absolute language. They carry no evidence labels, so label
+// demotion never applies; flags mark the copy for review.
+const COPY_FIELD_PATTERN = /^(objectiveRationale|differentiation\.(?:notDo|doInstead)|ctaStrategy\.(?:primary|secondary|rationale)|campaignConcept\.|platformStrategy\[|campaignPhases\[|storyArc\[|creativeTerritories\[)/;
+// Explicit proposal/measurement wording ("the proposed discount", "A/B test
+// the offer") marks the offer as the hypothetical under test, not an asserted
+// existing premise - measurement fields with it stay silent.
+const HYPOTHETICAL_OFFER_PATTERN = /\b(proposed|hypothetical|candidate|experimental|test|tested|testing|pilot)\b/i;
 // "Worldwide" wording does not clear the check when the same excerpts carry
 // expiry, eligibility, or regional-restriction signals.
 // Offer aspects checked individually: coverage of one aspect in the target
@@ -172,6 +184,11 @@ function reviewClaim(field, claim, sources, now, adjustments, flags, context = {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'hedged-language', detail: hedge[0].toLowerCase() });
       claim.evidenceType = 'inferred';
     }
+    const inference = claim.evidenceType === 'observed' ? statement.match(INFERENTIAL_PATTERN) : null;
+    if (inference) {
+      adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'inferential-framing', detail: inference[0].toLowerCase() });
+      claim.evidenceType = 'inferred';
+    }
     const missing = claim.evidenceType === 'observed' ? missingQualifiers(statement, excerpts) : [];
     if (missing.length) {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'qualifier-not-in-sources', detail: missing.join(', ') });
@@ -211,17 +228,25 @@ function reviewClaim(field, claim, sources, now, adjustments, flags, context = {
       flags.push({ field, reason: 'source-region-mismatch', detail, checkedAt: now.toISOString() });
     }
   }
-  // Offer guards skip directive fields (KPIs, experiments, risks, kill
-  // criteria): those instruct or measure, they do not assert a premise.
-  const directive = /^(kpis|experiments|risks|killCriteria)\[/.test(field);
+  // Copy, instruction, and measurement fields (differentiation, CTAs, concept,
+  // platform roles, phases, story, territories, KPIs, experiments, risks, kill
+  // criteria) flag existence-framed offer premises: "the concrete 10%
+  // discount" presupposes the discount whatever field carries it. Indefinite
+  // proposals ("test a 10% discount") stay silent everywhere, and measurement
+  // wording that explicitly names the offer as the proposal under test
+  // ("the proposed discount", "A/B test the offer") stays silent too.
+  const instructional = /^(kpis|experiments|risks|killCriteria)\[/.test(field) || COPY_FIELD_PATTERN.test(field);
+  const measurement = /^(kpis|experiments|risks|killCriteria)\[/.test(field);
   const normalizedStatement = normalizeForMatch(statement);
-  if (!directive && OFFER_PATTERN.test(normalizedStatement) && !UNCERTAIN_OFFER_PATTERN.test(normalizedStatement)) {
+  const offerFramed = EXISTING_OFFER_PATTERN.test(normalizedStatement);
+  const hypotheticalOffer = HYPOTHETICAL_OFFER_PATTERN.test(normalizedStatement);
+  if (OFFER_PATTERN.test(normalizedStatement) && !UNCERTAIN_OFFER_PATTERN.test(normalizedStatement) && (!instructional || (offerFramed && !(measurement && hypotheticalOffer)))) {
     const offerSources = cited.filter((source) => OFFER_PATTERN.test(normalizeForMatch(`${source?.title || ''} ${source?.snippet || ''}`)));
     const globallyCovered = GLOBAL_MARKET_PATTERN.test(excerpts) && !OFFER_RESTRICTION_PATTERN.test(excerpts);
     if (!offerSources.length) {
       // An existing-offer premise with no offer evidence behind it - including
       // the zero-citation case. Indefinite proposals stay silent.
-      if (EXISTING_OFFER_PATTERN.test(normalizedStatement) && !globallyCovered) {
+      if (offerFramed && !globallyCovered) {
         flags.push({ field, reason: 'offer-premise-unsourced', detail: market ? `existing offer asserted without a cited source; not verified for ${marketLabel}` : 'existing offer asserted without a cited source', checkedAt: now.toISOString() });
       }
     } else if (market && !globallyCovered) {
@@ -260,6 +285,37 @@ function applyConsistencyFloor(target, sources, now, context, { claims = [], lis
   for (const field of lists) {
     (Array.isArray(target[field]) ? target[field] : []).forEach((item, index) => reviewClaim(`${field}[${index}]`, item, sources, now, adjustments, flags, context));
   }
+  // Copy/instruction text is checked as flag-only pseudo-claims (no evidence
+  // label to demote): existence-framed offer premises and absolute language in
+  // consumer-facing or planning copy surface for review. Objects without these
+  // fields (audience profiles) no-op on the typeof guard.
+  const reviewCopy = (field, text, sourceIds) => {
+    if (typeof text === 'string' && text.trim()) reviewClaim(field, { statement: text, sourceIds: Array.isArray(sourceIds) ? sourceIds : [] }, sources, now, adjustments, flags, context);
+  };
+  reviewCopy('objectiveRationale', target.objectiveRationale);
+  reviewCopy('differentiation.notDo', target.differentiation?.notDo, target.differentiation?.sourceIds);
+  reviewCopy('differentiation.doInstead', target.differentiation?.doInstead, target.differentiation?.sourceIds);
+  reviewCopy('ctaStrategy.primary', target.ctaStrategy?.primary, target.ctaStrategy?.sourceIds);
+  reviewCopy('ctaStrategy.secondary', target.ctaStrategy?.secondary, target.ctaStrategy?.sourceIds);
+  reviewCopy('ctaStrategy.rationale', target.ctaStrategy?.rationale, target.ctaStrategy?.sourceIds);
+  const concept = target.campaignConcept;
+  if (concept && typeof concept === 'object') {
+    for (const key of ['campaignName', 'bigIdea', 'campaignThought', 'coreNarrative', 'emotionalPromise', 'brandRole', 'audienceRole', 'cta']) reviewCopy(`campaignConcept.${key}`, concept[key], concept.sourceIds);
+  }
+  (Array.isArray(target.storyArc) ? target.storyArc : []).forEach((item, index) => {
+    reviewCopy(`storyArc[${index}].stage`, item?.stage);
+    reviewCopy(`storyArc[${index}].description`, item?.description);
+  });
+  (Array.isArray(target.platformStrategy) ? target.platformStrategy : []).forEach((item, index) => {
+    for (const key of ['role', 'contentType', 'audienceBehavior', 'primaryKpi']) reviewCopy(`platformStrategy[${index}].${key}`, item?.[key], item?.sourceIds);
+  });
+  (Array.isArray(target.campaignPhases) ? target.campaignPhases : []).forEach((item, index) => {
+    for (const key of ['name', 'focus', 'description']) reviewCopy(`campaignPhases[${index}].${key}`, item?.[key]);
+  });
+  (Array.isArray(target.creativeTerritories) ? target.creativeTerritories : []).forEach((item, index) => {
+    for (const key of ['name', 'coreThought', 'emotionalDirection', 'audienceRelevance', 'brandRelevance']) reviewCopy(`creativeTerritories[${index}].${key}`, item?.[key], item?.sourceIds);
+  });
+
   target.meta = { ...(target.meta || {}) };
   delete target.meta.labelAdjustments;
   delete target.meta.claimFlags;

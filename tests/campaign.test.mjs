@@ -183,3 +183,14 @@ test('override helper keeps objective within the controlled option set', () => {
   assert.equal(result.objective, '');
   assert.ok(CAMPAIGN_OBJECTIVES.includes('Community Building'));
 });
+
+test('supporting messages carrying copy in message are normalized into checkable statements and flagged', async () => {
+  const discountSources = [{ id: 'source-1', title: "How Can I Get Nike's Best Deals?", url: 'https://www.nike.com/help/a/product-discount', domain: 'nike.com', snippet: 'First, we offer a 10% discount to eligible shoppers who are part of the following groups.' }];
+  const localContext = { ...context, research: { sources: discountSources, meta: { researchedAt: '2026-08-20T00:00:00.000Z' } } };
+  const result = await generateCampaignStrategy(localContext, { ai: { apiKey: 'test-key' } }, { fetchImpl: fetchImplFor(candidate({ supportingMessages: [{ category: 'Value', message: 'Save 10% instantly on the Metcon you need to power your workouts.', evidenceType: 'observed', sourceIds: ['source-1'] }] })), now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(result.meta.status, 'ready');
+  assert.equal(result.supportingMessages[0].statement, 'Save 10% instantly on the Metcon you need to power your workouts.');
+  assert.equal(result.supportingMessages[0].message, 'Save 10% instantly on the Metcon you need to power your workouts.');
+  const flag = (result.meta.claimFlags || []).find((entry) => entry.field === 'supportingMessages[0]');
+  assert.equal(flag?.reason, 'offer-market-unverified');
+});

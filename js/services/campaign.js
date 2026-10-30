@@ -45,7 +45,7 @@ function sourceIdsFrom(value, knownIds) {
 
 function normalizeClaim(raw, knownIds, fallbackType = 'hypothesis') {
   const object = typeof raw === 'string' ? { statement: raw } : raw && typeof raw === 'object' ? raw : {};
-  const statement = clean(object.statement || object.text || object.summary || object.title);
+  const statement = clean(object.statement || object.text || object.message || object.summary || object.title);
   const evidenceType = EVIDENCE_TYPES.includes(object.evidenceType) ? object.evidenceType : fallbackType;
   const sourceIds = sourceIdsFrom(object.sourceIds, knownIds);
   return {
