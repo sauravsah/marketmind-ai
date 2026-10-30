@@ -2,6 +2,7 @@ import { synthesizeAudience } from './ai.js';
 import { createEmptyAudienceProfile } from '../models.js';
 import { validateAudienceEvidence as validateItemEvidence } from '../prompts/audience.js';
 import { ensureAudienceClaimMetadata, getAudienceReviewSummary } from '../audience-review.js';
+import { applyAudienceClaimConsistency } from './claim-consistency.js';
 
 const SIGNAL_KEYS = ['marketSignals', 'audienceSignals', 'industryDevelopments', 'culturalSignals', 'competitorSignals', 'events', 'technologySignals'];
 const ITEM_KEYS = ['segments', 'observedBehaviors', 'motivations', 'pains', 'desires', 'tensions', 'barriers', 'objections', 'triggers', 'identityDrivers', 'contentBehaviors', 'decisionFactors', 'momentsThatMatter', 'hypotheses', 'uncertainties'];
@@ -164,21 +165,23 @@ export async function analyzeAudience(context, configs = {}, options = {}) {
     return unavailableProfile(context, context.research, 'MarketMind is temporarily unable to complete this analysis. Please try again.');
   }
 
-  const synthesis = await synthesizeAudience({ ...context, research: context.research }, evidence.sources, configs.ai, options);
+  const callStats = {};
+  const synthesis = await synthesizeAudience({ ...context, research: context.research }, evidence.sources, configs.ai, { ...options, callStats });
   stage(onStage, 4);
   if (!synthesis.candidate) {
     const failed = unavailableProfile(context, context.research, synthesis.warning || 'Audience synthesis failed.');
-    failed.meta = { ...(failed.meta || {}), failureReason: synthesis.reason || 'unknown' };
+    failed.meta = { ...(failed.meta || {}), failureReason: synthesis.reason || 'unknown', providerCalls: callStats };
     return failed;
   }
   const profile = baseProfile(context, context.research, 'research-backed', synthesis.status, [synthesis.warning]);
   const validated = validateAudienceProfile(synthesis.candidate, evidence.sources, { research: context.research });
   Object.assign(profile, validated);
+  applyAudienceClaimConsistency(profile, evidence.sources, options.now instanceof Date ? options.now : new Date(), { market: context?.strategy?.market });
   profile.id = `audience-${Date.now()}`;
   profile.strategyId = context?.strategy?.id || null;
   profile.researchVersion = context.research?.meta?.researchedAt || null;
   profile.createdAt = new Date().toISOString();
-  profile.meta = { mode: 'research-backed', aiStatus: synthesis.status, warnings: [synthesis.warning].filter(Boolean) };
+  profile.meta = { ...(profile.meta || {}), mode: 'research-backed', aiStatus: synthesis.status, providerCalls: callStats, warnings: [synthesis.warning].filter(Boolean) };
   return profile;
 }
 

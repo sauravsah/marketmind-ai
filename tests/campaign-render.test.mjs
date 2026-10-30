@@ -163,3 +163,71 @@ test('audience results page renders the real campaignReviewBanner for audience c
   assert.ok(appSource.includes('${campaignReviewBanner(profile)}'), 'audience results template must render the review banner for audience flags');
   assert.ok(readFileSync(new URL('../js/services/audience.js', import.meta.url), 'utf8').includes('applyAudienceClaimConsistency(profile'), 'audience.js must apply the consistency floor to audience profiles');
 });
+
+function loadReadyBanner() {
+  const escapeHtml = new Function(`${extractFunction('escapeHtml')}\nreturn escapeHtml;`)();
+  return new Function(
+    'escapeHtml',
+    'icon',
+    `${extractFunction('campaignIncompleteSections')}\n${extractFunction('campaignReadyBanner')}\nreturn { campaignIncompleteSections, campaignReadyBanner };`,
+  )(escapeHtml, () => '[icon]');
+}
+
+test('campaign ready banner lists missing sections with generate paths instead of claiming readiness', () => {
+  const { campaignReadyBanner } = loadReadyBanner();
+  const partial = {
+    creativeTerritories: [{ id: 't1', name: 'Territory' }],
+    campaignConcept: { bigIdea: 'Idea' },
+    platformStrategy: [{ platform: 'Instagram' }],
+    kpis: [],
+    experiments: [],
+    risks: [],
+    killCriteria: [],
+  };
+  const html = campaignReadyBanner(partial, partial.campaignConcept, true);
+  assert.match(html, /CAMPAIGN STRATEGY INCOMPLETE/);
+  assert.doesNotMatch(html, /Every section has content/);
+  assert.doesNotMatch(html, /Create Creative/);
+  assert.match(html, /Success metrics/);
+  assert.match(html, /Experiments/);
+  assert.match(html, /Risks/);
+  assert.match(html, /Kill criteria/);
+  assert.match(html, /data-section="measurement"/);
+  assert.doesNotMatch(html, /Creative territories<\/button>/);
+});
+
+test('campaign ready banner requires a territory selection before concept generation', () => {
+  const { campaignReadyBanner } = loadReadyBanner();
+  const partial = {
+    creativeTerritories: [{ id: 't1', name: 'Territory' }],
+    platformStrategy: [{ platform: 'Instagram' }],
+    kpis: [{ name: 'KPI' }],
+    experiments: [{ name: 'Test' }],
+    risks: [{ statement: 'Risk' }],
+    killCriteria: [{ statement: 'Stop' }],
+  };
+  const html = campaignReadyBanner(partial, null, false);
+  assert.match(html, /select a creative territory first/i);
+  assert.doesNotMatch(html, /data-section="concept"/);
+});
+
+test('campaign ready banner only claims readiness when every section has content', () => {
+  const { campaignReadyBanner } = loadReadyBanner();
+  const complete = {
+    creativeTerritories: [{ id: 't1', name: 'Territory' }],
+    campaignConcept: { bigIdea: 'Idea' },
+    platformStrategy: [{ platform: 'Instagram' }],
+    kpis: [{ name: 'KPI' }],
+    experiments: [{ name: 'Test' }],
+    risks: [{ statement: 'Risk' }],
+    killCriteria: [{ statement: 'Stop' }],
+  };
+  const html = campaignReadyBanner(complete, complete.campaignConcept, true);
+  assert.match(html, /CAMPAIGN STRATEGY READY/);
+  assert.doesNotMatch(html, /INCOMPLETE/);
+  // Creative development is Phase 6 and does not exist yet: the hand-off must
+  // read as unavailable, never as an enabled action.
+  assert.match(html, /disabled/);
+  assert.match(html, /Coming in Phase 6/);
+  assert.doesNotMatch(html, /data-action="creative-coming"/);
+});

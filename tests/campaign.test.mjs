@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CAMPAIGN_OBJECTIVES, createDefaultStrategy, createEmptyCampaignStrategy } from '../js/models.js';
 import { applyCampaignOverrides, calculateCampaignConfidence, generateCampaignStrategy, normalizeCampaignStrategy, prepareCampaignContext } from '../js/services/campaign.js';
+import { buildCampaignStrategyPrompt } from '../js/prompts/campaign.js';
 
 const sources = [1, 2, 3].map((number) => ({ id: `source-${number}`, title: `Evidence ${number}`, url: `https://example.com/evidence-${number}`, domain: 'example.com', snippet: `Supplied evidence ${number}.` }));
 const opportunity = {
@@ -193,4 +194,70 @@ test('supporting messages carrying copy in message are normalized into checkable
   assert.equal(result.supportingMessages[0].message, 'Save 10% instantly on the Metcon you need to power your workouts.');
   const flag = (result.meta.claimFlags || []).find((entry) => entry.field === 'supportingMessages[0]');
   assert.equal(flag?.reason, 'offer-market-unverified');
+});
+
+test('measurement regeneration merges KPIs, experiments, risks and kill criteria into the existing campaign', async () => {
+  const existing = await generateCampaignStrategy(context, { ai: { apiKey: 'test-key' } }, { fetchImpl: fetchImplFor(candidate({ kpis: [], experiments: [], risks: [], killCriteria: [] })), now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(existing.kpis.length, 0);
+  assert.equal(existing.risks.length, 0);
+  const measurementPayload = {
+    opportunityId: 'opportunity-1',
+    kpis: [{ name: 'Bundle redemptions', category: 'Conversion', statement: 'Track bundle redemptions per gym partner.', evidenceType: 'unknown', sourceIds: [] }],
+    experiments: [{ name: 'QR vs app claim', statement: 'Test which claim path converts better.', variants: ['QR', 'App'], measure: 'Redemption rate', evidenceType: 'hypothesis', sourceIds: ['source-1'] }],
+    risks: [{ category: 'Partner', statement: 'Gym partners may favor local brands.', mitigation: 'Negotiate bundle terms early.', evidenceType: 'inferred', sourceIds: ['source-1'] }],
+    killCriteria: [{ statement: 'Redemption stays near zero after the first month.', evidenceType: 'unknown', sourceIds: [] }],
+  };
+  const updated = await generateCampaignStrategy(context, { ai: { apiKey: 'test-key' } }, { fetchImpl: fetchImplFor(measurementPayload), existing, section: 'measurement', now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(updated.meta.status, 'ready');
+  assert.equal(updated.kpis.length, 1);
+  assert.equal(updated.experiments.length, 1);
+  assert.equal(updated.risks.length, 1);
+  assert.equal(updated.killCriteria.length, 1);
+  assert.equal(updated.strategicProblem.statement, existing.strategicProblem.statement);
+  assert.equal(updated.creativeTerritories.length, existing.creativeTerritories.length);
+});
+
+test('an empty measurement response preserves existing KPIs instead of wiping them', async () => {
+  const measurementPayload = {
+    opportunityId: 'opportunity-1',
+    kpis: [{ name: 'Bundle redemptions', category: 'Conversion', statement: 'Track bundle redemptions per gym partner.', evidenceType: 'unknown', sourceIds: [] }],
+    experiments: [{ name: 'QR vs app claim', statement: 'Test which claim path converts better.', variants: ['QR', 'App'], measure: 'Redemption rate', evidenceType: 'hypothesis', sourceIds: ['source-1'] }],
+    risks: [{ category: 'Partner', statement: 'Gym partners may favor local brands.', mitigation: 'Negotiate bundle terms early.', evidenceType: 'inferred', sourceIds: ['source-1'] }],
+    killCriteria: [{ statement: 'Redemption stays near zero after the first month.', evidenceType: 'unknown', sourceIds: [] }],
+  };
+  const existing = await generateCampaignStrategy(context, { ai: { apiKey: 'test-key' } }, { fetchImpl: fetchImplFor(candidate(measurementPayload)), now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(existing.kpis.length, 1);
+  // A truncated scoped regeneration returns empty arrays: existing content must survive.
+  const wiped = await generateCampaignStrategy(context, { ai: { apiKey: 'test-key' } }, { fetchImpl: fetchImplFor({ opportunityId: 'opportunity-1', kpis: [], experiments: [], risks: [], killCriteria: [] }), existing, section: 'measurement', now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(wiped.meta.status, 'ready');
+  assert.equal(wiped.kpis.length, 1);
+  assert.equal(wiped.experiments.length, 1);
+  assert.equal(wiped.risks.length, 1);
+  assert.equal(wiped.killCriteria.length, 1);
+});
+
+test('a failed measurement regeneration preserves existing measurement content', async () => {
+  const measurementPayload = {
+    opportunityId: 'opportunity-1',
+    kpis: [{ name: 'Bundle redemptions', category: 'Conversion', statement: 'Track bundle redemptions per gym partner.', evidenceType: 'unknown', sourceIds: [] }],
+    experiments: [{ name: 'QR vs app claim', statement: 'Test which claim path converts better.', variants: ['QR', 'App'], measure: 'Redemption rate', evidenceType: 'hypothesis', sourceIds: ['source-1'] }],
+    risks: [{ category: 'Partner', statement: 'Gym partners may favor local brands.', mitigation: 'Negotiate bundle terms early.', evidenceType: 'inferred', sourceIds: ['source-1'] }],
+    killCriteria: [{ statement: 'Redemption stays near zero after the first month.', evidenceType: 'unknown', sourceIds: [] }],
+  };
+  const existing = await generateCampaignStrategy(context, { ai: { apiKey: 'test-key' } }, { fetchImpl: fetchImplFor(candidate(measurementPayload)), now: new Date('2026-08-29T00:00:00.000Z') });
+  const failingFetch = async () => new Response('provider down', { status: 500 });
+  const failed = await generateCampaignStrategy(context, { ai: { apiKey: 'test-key' } }, { fetchImpl: failingFetch, existing, section: 'measurement', now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(failed.meta.status, 'failed');
+  assert.equal(failed.kpis.length, 1);
+  assert.equal(failed.experiments.length, 1);
+  assert.equal(failed.risks.length, 1);
+  assert.equal(failed.killCriteria.length, 1);
+  assert.equal(failed.strategicProblem.statement, existing.strategicProblem.statement);
+});
+
+test('measurement prompt scope requests only KPIs, experiments, risks and kill criteria', () => {
+  const { system } = buildCampaignStrategyPrompt(context, { section: 'measurement' });
+  assert.match(system, /killCriteria/);
+  assert.match(system, /experiments/);
+  assert.doesNotMatch(system, /creativeTerritories/);
 });

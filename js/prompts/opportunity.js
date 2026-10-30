@@ -56,6 +56,7 @@ export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced'
       'Use only the supplied evidence. Clearly distinguish observed, inferred, and hypothesis content.',
       ...EVIDENCE_DISCIPLINE_RULES,
       'Only audience claims in the supplied reviewedSignals packet are eligible audience context. Do not use audience claims from strategy context or any omitted audience field.',
+      'Copy each claimId from reviewedSignals into the audienceSignals item that uses that claim. Items without a valid claimId or the exact reviewed statement are discarded.',
       'Use language such as potential opportunity, evidence-backed direction, strategic hypothesis, and worth validating.',
       'Never say an opportunity will definitely work, is guaranteed, or has a probability of success.',
       'Never create a fake persona, customer quote, statistic, source, competitor behavior, or market urgency.',
@@ -90,7 +91,21 @@ export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced'
       },
       audienceIntelligence: {
         evidenceCoverage: audience.evidenceCoverage || {},
-        reviewedSignals: itemPacket(reviewedAudience, cited.packetIds, packetBudget),
+        reviewedSignals: (() => {
+          // Stable index-based claimIds, assigned before packet filtering/clipping
+          // so they match the normalizer's prepared.audienceSignals ordering.
+          const claimIds = reviewedAudience.map((item, index) => ({
+            claimId: `aud-${index + 1}`,
+            key: clipText(clean(item?.statement), PACKET_BUDGET.maxStatementChars),
+            used: false,
+          }));
+          return itemPacket(reviewedAudience, cited.packetIds, packetBudget).slice(0, 10).map((item) => {
+            const match = claimIds.find((entry) => !entry.used && entry.key && entry.key === item.statement);
+            if (!match) return item;
+            match.used = true;
+            return { claimId: match.claimId, ...item };
+          });
+        })(),
       },
       requiredOutput: {
         opportunities: 'array; default up to 5, fewer when evidence is weak or territories overlap',
@@ -100,7 +115,7 @@ export function buildOpportunityPrompt(context, evidence = {}, lens = 'balanced'
           type: 'cultural|audience|category|competitive|product|content|community|timing|positioning',
           strategicThesis: 'Because X is happening, and Y appears to matter to the audience, the brand could explore Z.',
           marketSignals: 'array of evidence items with statement, evidenceType, and sourceIds',
-          audienceSignals: 'array of audience items with statement, evidenceType, and sourceIds',
+          audienceSignals: 'array of audience items with claimId from reviewedSignals, statement, evidenceType, and sourceIds',
           brandFit: { level: 'high|medium|low', explanation: 'reasoned explanation', evidenceType: 'inferred|hypothesis|unknown', sourceIds: [] },
           competitiveContext: { summary: 'what is known and what is not known', evidenceType: 'observed|inferred|hypothesis|unknown', sourceIds: [] },
           timing: { level: 'strong|moderate|weak|unknown', explanation: 'why now, or why timing is uncertain', evidenceType: 'observed|inferred|hypothesis|unknown', sourceIds: [] },

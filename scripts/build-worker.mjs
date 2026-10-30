@@ -15,10 +15,13 @@ cpSync(join(project, 'server', 'config.mjs'), join(dist, 'server', 'config.mjs')
 cpSync(join(project, 'server', 'firebase-auth.mjs'), join(dist, 'server', 'firebase-auth.mjs'));
 cpSync(join(project, 'server', 'feedback.mjs'), join(dist, 'server', 'feedback.mjs'));
 cpSync(join(project, 'server', 'worker.mjs'), join(dist, 'server', 'worker.mjs'));
+cpSync(join(project, 'functions', 'access.mjs'), join(dist, 'server', 'access.mjs'));
 const workerPath = join(dist, 'server', 'worker.mjs');
 const workerSource = readFileSync(workerPath, 'utf8')
   .replaceAll("from '../js/", "from './js/")
-  .replaceAll('from "../js/', 'from "./js/');
+  .replaceAll('from "../js/', 'from "./js/')
+  .replaceAll("from '../functions/access.mjs", "from './access.mjs")
+  .replaceAll('from "../functions/access.mjs"', 'from "./access.mjs"');
 writeFileSync(workerPath, workerSource);
 writeFileSync(join(dist, 'server', 'index.js'), "export { default } from './worker.mjs';\nexport * from './worker.mjs';\n");
 

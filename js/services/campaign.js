@@ -233,8 +233,15 @@ function mergeForSection(existing, raw, section) {
     territories: ['creativeTerritories'],
     concept: ['campaignConcept', 'creativePrinciple', 'emotionalTerritory', 'selectedCreativeTerritoryId'],
     channels: ['storyArc', 'platformStrategy', 'contentPillars', 'ctaStrategy', 'campaignPhases', 'kpis', 'experiments'],
+    measurement: ['kpis', 'experiments', 'risks', 'killCriteria'],
   }[section] || [];
-  return { ...base, ...Object.fromEntries(keys.filter((key) => key in raw).map((key) => [key, raw[key]])) };
+  return { ...base, ...Object.fromEntries(keys.filter((key) => {
+    if (!(key in raw)) return false;
+    // A scoped regeneration that returns an empty array is almost always a
+    // truncated response, not a deliberate clearing: preserve existing content.
+    if (Array.isArray(raw[key]) && raw[key].length === 0 && Array.isArray(base[key]) && base[key].length > 0) return false;
+    return true;
+  }).map((key) => [key, raw[key]])) };
 }
 
 export function applyCampaignOverrides(campaign, overrides = campaign?.userOverrides || {}) {

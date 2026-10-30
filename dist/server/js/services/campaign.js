@@ -45,7 +45,7 @@ function sourceIdsFrom(value, knownIds) {
 
 function normalizeClaim(raw, knownIds, fallbackType = 'hypothesis') {
   const object = typeof raw === 'string' ? { statement: raw } : raw && typeof raw === 'object' ? raw : {};
-  const statement = clean(object.statement || object.text || object.summary || object.title);
+  const statement = clean(object.statement || object.text || object.message || object.summary || object.title);
   const evidenceType = EVIDENCE_TYPES.includes(object.evidenceType) ? object.evidenceType : fallbackType;
   const sourceIds = sourceIdsFrom(object.sourceIds, knownIds);
   return {
@@ -233,8 +233,15 @@ function mergeForSection(existing, raw, section) {
     territories: ['creativeTerritories'],
     concept: ['campaignConcept', 'creativePrinciple', 'emotionalTerritory', 'selectedCreativeTerritoryId'],
     channels: ['storyArc', 'platformStrategy', 'contentPillars', 'ctaStrategy', 'campaignPhases', 'kpis', 'experiments'],
+    measurement: ['kpis', 'experiments', 'risks', 'killCriteria'],
   }[section] || [];
-  return { ...base, ...Object.fromEntries(keys.filter((key) => key in raw).map((key) => [key, raw[key]])) };
+  return { ...base, ...Object.fromEntries(keys.filter((key) => {
+    if (!(key in raw)) return false;
+    // A scoped regeneration that returns an empty array is almost always a
+    // truncated response, not a deliberate clearing: preserve existing content.
+    if (Array.isArray(raw[key]) && raw[key].length === 0 && Array.isArray(base[key]) && base[key].length > 0) return false;
+    return true;
+  }).map((key) => [key, raw[key]])) };
 }
 
 export function applyCampaignOverrides(campaign, overrides = campaign?.userOverrides || {}) {
@@ -314,7 +321,7 @@ export function normalizeCampaignStrategy(raw, context, options = {}) {
   campaign.sourceIds = sourceIdsFrom(unique([...campaign.sourceIds, ...nestedSourceIds(campaign)]), knownIds);
   const overridden = applyCampaignOverrides(campaign, campaign.userOverrides);
   overridden.confidence = calculateCampaignConfidence(overridden, { ...context, prepared });
-  applyClaimConsistency(overridden, prepared.sources, options.now instanceof Date ? options.now : new Date());
+  applyClaimConsistency(overridden, prepared.sources, options.now instanceof Date ? options.now : new Date(), { market: prepared.strategy?.market });
   overridden.meta.assessmentLabel = 'MarketMind assessment based on available intelligence. Not a success probability.';
   const hasStrategicOutput = Boolean(overridden.strategicProblem.statement || overridden.audienceInsight.statement || overridden.campaignThesis.statement || overridden.campaignConcept?.bigIdea || overridden.creativeTerritories.length || overridden.platformStrategy.length);
   if (!hasStrategicOutput) return null;
@@ -352,11 +359,13 @@ export async function generateCampaignStrategy(context = {}, configs = {}, optio
   sendStage(onStage, 2);
   if (!configs.ai?.apiKey) return baseCampaign(context, prepared, 'unavailable', ['MarketMind is temporarily unable to complete this analysis. Please try again.'], now, options.existing);
   sendStage(onStage, 3);
-  const synthesis = await synthesizeCampaignStrategy({ ...context, prepared, campaignStrategy: options.existing || context.campaignStrategy || null, regenerationScope: options.section || 'all' }, configs.ai, { ...options, section: options.section || 'all' });
+  const callStats = {};
+  const synthesis = await synthesizeCampaignStrategy({ ...context, prepared, campaignStrategy: options.existing || context.campaignStrategy || null, regenerationScope: options.section || 'all' }, configs.ai, { ...options, section: options.section || 'all', callStats });
   sendStage(onStage, 4);
   if (!synthesis.candidate) {
     const failed = baseCampaign(context, prepared, 'failed', [synthesis.warning || 'Campaign strategy synthesis failed.'], now, options.existing);
     failed.meta.failureReason = synthesis.reason || 'unknown';
+    failed.meta.providerCalls = callStats;
     return failed;
   }
   sendStage(onStage, 5);
@@ -368,6 +377,7 @@ export async function generateCampaignStrategy(context = {}, configs = {}, optio
     return failed;
   }
   campaign.meta.aiStatus = synthesis.status;
+  campaign.meta.providerCalls = callStats;
   campaign.meta.warnings = [synthesis.warning].filter(Boolean);
   return campaign;
 }

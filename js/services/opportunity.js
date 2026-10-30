@@ -67,6 +67,8 @@ function normalizedStatement(value) {
   return clean(value).toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
 }
 
+
+
 function allSourceIds(opportunity) {
   const nested = [
     ...(opportunity.marketSignals || []),
@@ -186,8 +188,17 @@ function normalizeOpportunity(raw, index, context, prepared) {
   if (!title || !thesis) return null;
   const knownIds = new Set(prepared.sourceIds);
   const marketSignals = itemCollection(raw.marketSignals, knownIds, 'observed', false);
-  const eligibleAudienceStatements = new Set((prepared.audienceSignals || []).map((item) => normalizedStatement(item.statement)));
-  const audienceSignals = itemCollection(raw.audienceSignals, knownIds, 'hypothesis', false).filter((item) => eligibleAudienceStatements.has(normalizedStatement(item.statement)));
+  const reviewedAudienceClaims = (prepared.audienceSignals || []).map((item, index) => ({ claimId: `aud-${index + 1}`, statement: item.statement }));
+  const reviewedByClaimId = new Map(reviewedAudienceClaims.map((item) => [item.claimId, item.statement]));
+  const reviewedStatements = new Set(reviewedAudienceClaims.map((item) => normalizedStatement(item.statement)));
+  // Link regenerated audience claims back to reviewed claims by claimId (the
+  // reviewed wording is restored) or by exact statement only. Anything else is
+  // rejected: a retryable empty result beats a misattributed audience claim.
+  const linkedAudienceSignals = (Array.isArray(raw.audienceSignals) ? raw.audienceSignals : []).map((item) => {
+    const reviewed = reviewedByClaimId.get(clean(item?.claimId));
+    return reviewed ? { ...item, statement: reviewed } : item;
+  });
+  const audienceSignals = itemCollection(linkedAudienceSignals, knownIds, 'hypothesis', false).filter((item) => reviewedStatements.has(normalizedStatement(item.statement)));
   if (!marketSignals.length || !audienceSignals.length) return null;
   const evidence = itemCollection(raw.evidence, knownIds, 'hypothesis', false);
   const contradictions = itemCollection(raw.contradictions, knownIds, 'inferred', false);
@@ -323,7 +334,21 @@ export async function identifyOpportunities(context, configs = {}, options = {})
   const previous = Array.isArray(context?.previousOpportunities) ? context.previousOpportunities : [];
   const fresh = normalized.filter((item) => !previous.some((prior) => similarity(item, prior) >= 0.62));
   const opportunities = diversifyOpportunities(deduplicateOpportunities(fresh), 5);
-  const radar = baseRadar(context, readiness, opportunities.length ? 'ready' : 'insufficient', [synthesis.warning], now);
+  if (!opportunities.length && normalized.length) {
+    // Everything usable was a near-duplicate of earlier rounds: genuinely
+    // nothing new, rather than a synthesis failure.
+    return baseRadar(context, readiness, 'insufficient', [synthesis.warning || 'No new opportunities beyond the earlier rounds. Try a different lens or refresh the evidence.'], now, variation);
+  }
+  if (!opportunities.length) {
+    // Synthesis completed but nothing usable survived normalization. That is a
+    // retryable analysis failure, not proof that more evidence is needed, so
+    // say so instead of showing the insufficient-evidence notice.
+    const failed = baseRadar(context, readiness, 'failed', [synthesis.warning || 'MarketMind could not shape the current evidence into usable opportunities this time. Try again; no new evidence is needed.'], now, variation);
+    failed.meta.failureReason = 'no-usable-opportunities';
+    failed.meta.providerCalls = callStats;
+    return failed;
+  }
+  const radar = baseRadar(context, readiness, 'ready', [synthesis.warning], now);
   radar.opportunities = opportunities;
   radar.lens = options.lens || 'balanced';
   radar.researchTimestamp = prepared.researchTimestamp;

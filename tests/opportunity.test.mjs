@@ -120,7 +120,8 @@ test('opportunity synthesis cannot reintroduce an unreviewed audience claim', as
   const fetchImpl = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ opportunities: [candidate({ audienceSignals: [{ statement: 'An unreviewed audience claim.', evidenceType: 'inferred', sourceIds: ['source-2'] }] })] }) } }] }), { status: 200 });
   const radar = await identifyOpportunities(context, { ai: { apiKey: 'test-key' } }, { fetchImpl });
   assert.equal(radar.opportunities.length, 0);
-  assert.equal(radar.meta.status, 'insufficient');
+  assert.equal(radar.meta.status, 'failed');
+  assert.equal(radar.meta.failureReason, 'no-usable-opportunities');
   const prompt = buildOpportunityPrompt(context, prepareOpportunityContext(context), 'balanced', 0);
   assert.match(prompt.user, /reviewedSignals/);
   assert.doesNotMatch(prompt.user, /observedBehaviors/);
@@ -159,4 +160,38 @@ test('malformed AI output returns no invented opportunities', async () => {
   const radar = await identifyOpportunities(context, { ai: { apiKey: 'test-key' } }, { fetchImpl });
   assert.equal(radar.opportunities.length, 0);
   assert.equal(radar.meta.status, 'failed');
+});
+
+test('a paraphrased audience claim is linked by claimId and restored to the reviewed wording', async () => {
+  const prepared = prepareOpportunityContext(context);
+  const belongingIndex = prepared.audienceSignals.findIndex((item) => /belonging/i.test(item.statement));
+  assert.ok(belongingIndex >= 0);
+  const claimId = `aud-${belongingIndex + 1}`;
+  const paraphrased = candidate({ audienceSignals: [{ claimId, statement: 'A loosely reworded take on belonging the model produced.', evidenceType: 'inferred', sourceIds: ['source-2'], confidence: 'medium' }] });
+  const fetchImpl = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ opportunities: [paraphrased] }) } }] }), { status: 200 });
+  const radar = await identifyOpportunities(context, { ai: { apiKey: 'test-key' } }, { fetchImpl, now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(radar.meta.status, 'ready');
+  assert.equal(radar.opportunities.length, 1);
+  assert.equal(radar.opportunities[0].audienceSignals.length, 1);
+  assert.equal(radar.opportunities[0].audienceSignals[0].statement, prepared.audienceSignals[belongingIndex].statement);
+});
+
+test('a near-identical but materially different audience claim is rejected, not fuzzy-matched', async () => {
+  const negated = candidate({ audienceSignals: [{ statement: 'Belonging does not matter to this audience.', evidenceType: 'inferred', sourceIds: ['source-2'], confidence: 'medium' }] });
+  const fetchImpl = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ opportunities: [negated] }) } }] }), { status: 200 });
+  const radar = await identifyOpportunities(context, { ai: { apiKey: 'test-key' } }, { fetchImpl, now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(radar.opportunities.length, 0);
+  assert.equal(radar.meta.status, 'failed');
+  assert.equal(radar.meta.failureReason, 'no-usable-opportunities');
+  assert.match(radar.meta.warnings[0], /try again/i);
+});
+
+test('a verified synthesis with no usable opportunities is a retryable failure, not missing evidence', async () => {
+  const unusable = candidate({ audienceSignals: [{ statement: 'An unreviewed audience claim.', evidenceType: 'inferred', sourceIds: ['source-2'] }] });
+  const fetchImpl = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ opportunities: [unusable] }) } }] }), { status: 200 });
+  const radar = await identifyOpportunities(context, { ai: { apiKey: 'test-key' } }, { fetchImpl, now: new Date('2026-08-29T00:00:00.000Z') });
+  assert.equal(radar.meta.status, 'failed');
+  assert.equal(radar.meta.failureReason, 'no-usable-opportunities');
+  assert.match(radar.meta.warnings[0], /try again/i);
+  assert.doesNotMatch(radar.meta.warnings[0], /more evidence/i);
 });

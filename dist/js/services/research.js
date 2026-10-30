@@ -273,23 +273,31 @@ export async function researchMarket(context, configs = {}, options = {}) {
 
   onStage({ id: 'searching', label: 'Searching the market', queryCount: queries.length });
   const searchResult = await searchMany(provider, queries, options);
+  const searchCalls = searchResult.stats || { total: queries.length, ok: 0, failed: searchResult.failures.length };
   onStage({ id: 'evaluating', label: 'Evaluating sources', reviewed: searchResult.results.length });
   const retrievedAt = new Date().toISOString();
   const normalized = searchResult.results.map(({ raw, query }) => normalizeSearchResult(raw, query, retrievedAt)).filter(Boolean);
   const sources = deduplicateSources(normalized);
-  if (!sources.length) return sourceOnlyOutput([], depth, queries.length, searchResult.failures.length ? 'failed' : 'verified', 'not-configured', [searchResult.failures.length ? 'Search was unavailable for every query.' : 'No search results matched this strategy context.'], searchResult.failures);
+  if (!sources.length) {
+    const failed = sourceOnlyOutput([], depth, queries.length, searchResult.failures.length ? 'failed' : 'verified', 'not-configured', [searchResult.failures.length ? 'Search was unavailable for every query.' : 'No search results matched this strategy context.'], searchResult.failures);
+    failed.meta.searchCalls = searchCalls;
+    return failed;
+  }
 
   onStage({ id: 'synthesizing', label: 'Synthesizing findings', sources: sources.length });
-  const synthesis = await synthesizeResearch(context, sources, configs.ai, options);
+  const callStats = {};
+  const synthesis = await synthesizeResearch(context, sources, configs.ai, { ...options, callStats });
   if (!synthesis.candidate) {
     const failed = sourceOnlyOutput(sources, depth, queries.length, 'verified', synthesis.status, [synthesis.warning].filter(Boolean), searchResult.failures);
     failed.meta.failureReason = synthesis.reason || 'unknown';
+    failed.meta.providerCalls = callStats;
+    failed.meta.searchCalls = searchCalls;
     return failed;
   }
 
   const output = validateResearchOutput(synthesis.candidate, sources);
   const usedSourceIds = new Set(allSignals(output).flatMap((signal) => signal.sourceIds));
-  output.meta = { ...output.meta, researchedAt: new Date().toISOString(), depth, queryCount: queries.length, sourcesReviewed: sources.length, sourcesUsed: usedSourceIds.size, providerStatus: 'verified', aiStatus: synthesis.status, warnings: [], failures: searchResult.failures };
+  output.meta = { ...output.meta, researchedAt: new Date().toISOString(), depth, queryCount: queries.length, sourcesReviewed: sources.length, sourcesUsed: usedSourceIds.size, providerStatus: 'verified', aiStatus: synthesis.status, providerCalls: callStats, searchCalls, warnings: [], failures: searchResult.failures };
   output.sources = sources;
   onStage({ id: 'complete', label: 'Research ready', signals: allSignals(output).length });
   return output;
@@ -337,7 +345,8 @@ async function searchMany(provider, queries, options = {}) {
   const settled = await Promise.allSettled(queries.map((query) => provider.search(query).then((results) => results.map((raw) => ({ raw, query })) )));
   const results = []; const failures = [];
   settled.forEach((item, index) => { if (item.status === 'fulfilled') results.push(...item.value); else failures.push({ query: queries[index].query, message: 'Live market research is temporarily unavailable. Try again shortly.' }); });
-  return { results, failures };
+  const ok = settled.filter((item) => item.status === 'fulfilled').length;
+  return { results, failures, stats: { total: queries.length, ok, failed: failures.length } };
 }
 
 function marketCode(market) {

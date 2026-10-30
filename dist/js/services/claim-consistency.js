@@ -10,6 +10,98 @@
 // the change is auditable, not silent.
 
 const HEDGE_PATTERN = /\b(may|might|could|likely|unlikely|suggests?|tends? to|potential(?:ly)?|appears?|seems?)\b/i;
+// Inferential glue ("therefore they need", "as a result") is the model's synthesis,
+// not an observation. Unlike hedges there is no source exemption: a source's own
+// "therefore" is still a conclusion, so repeating it reports an inference.
+const INFERENTIAL_PATTERN = /\b(therefore|thus|hence|as a result|this means|which means|which suggests|implies that)\b/i;
+// Absolute risk/certainty language ("risk-free", "guaranteed results") asserts
+// what market evidence cannot prove. Flag only - never demote, never rewrite -
+// and only when the absolute phrase is the model's addition, absent from every
+// cited excerpt, so a claim faithfully quoting a source's own wording stays
+// untouched. Fixed list by design - a floor, not entailment.
+const ABSOLUTE_PATTERN = /\b(risk[- ]free|(?:no|zero|without) risk|eliminates? (?:all |any )?(?:purchase )?risk|guaranteed (?:results?|outcomes?|conversions?|sales|returns?)|works? for everyone|always (?:converts?|works?|wins?)|never (?:fails?|loses?))\b/i;
+
+// Offer-geography floor: a claim that cites sources for offer language ("10%
+// discount", "free exchange") presents the offer as evidenced. When none of the
+// cited sources that mention an offer place it in the strategy's target market,
+// the market fit of that premise is unverified - flag only, never demote or
+// rewrite. A source explicitly describing a global offer suppresses the flag.
+const OFFER_PATTERN = /\b\d{1,2}\s?%\s*(?:off|discount)\b|\bsave\s?\d{1,2}\s?%|\bsavings\b|\bdiscounts?\b|\bpromo(?:tion|tional|tions)?\b|\bcoupons?\b|\bvouchers?\b|\bfree (?:shipping|delivery|returns?|exchanges?|trials?)\b|\boffer\b|\bdeals?\b/i;
+const GLOBAL_MARKET_PATTERN = /\b(global(?:ly)?|worldwide|international(?:ly)?|all (?:markets|countries|regions))\b/i;
+// Text-bearing copy/instruction fields checked for existence-framed offer
+// premises and absolute language. They carry no evidence labels, so label
+// demotion never applies; flags mark the copy for review.
+const COPY_FIELD_PATTERN = /^(objectiveRationale|differentiation\.(?:notDo|doInstead)|ctaStrategy\.(?:primary|secondary|rationale)|campaignConcept\.|platformStrategy\[|campaignPhases\[|storyArc\[|creativeTerritories\[)/;
+// Explicit proposal/measurement wording ("the proposed discount", "A/B test
+// the offer") marks the offer as the hypothetical under test, not an asserted
+// existing premise - measurement fields with it stay silent.
+const HYPOTHETICAL_OFFER_PATTERN = /\b(proposed|hypothetical|candidate|experimental|test|tested|testing|pilot)\b/i;
+// "Worldwide" wording does not clear the check when the same excerpts carry
+// expiry, eligibility, or regional-restriction signals.
+// Offer aspects checked individually: coverage of one aspect in the target
+// market does not substantiate another aspect of the same claim. The generic
+// "offer or deal" facet is covered by any market offer source.
+const OFFER_FACETS = [
+  ['price reduction', /\b\d{1,2}\s?%\s*(?:off|discount)\b|\bdiscounts?\b|\bsave\s?\d{1,2}\s?%|\bsavings\b|\bcoupons?\b|\bvouchers?\b|\bpromo(?:tion|tional|tions)?\b/i],
+  ['free shipping or delivery', /\bfree (?:shipping|delivery)\b/i],
+  ['free returns or exchanges', /\bfree (?:returns?|exchanges?)\b/i],
+  ['free trial', /\bfree trials?\b/i],
+  ['offer or deal', /\boffer\b|\bdeals?\b/i],
+];
+
+const OFFER_RESTRICTION_PATTERN = /\b(excludes?|except|not (?:available|valid|eligible) in|only (?:available|valid|eligible) in|limited to|selected (?:countries|markets|regions|cities)|participating (?:countries|markets|stores|locations)|eligibility (?:varies|depends)|terms (?:and conditions )?apply|expires?|expiry|valid (?:till|until|through)|ends? on|limited[- ]time)\b/i;
+// An offer framed as existing fact (definite/possessive/explicitly existing) is
+// a checkable premise; an indefinite proposal ("test a 10% discount") is not.
+const EXISTING_OFFER_PATTERN = /\b(?:existing|current(?:ly)?|ongoing|already)\b[^.]{0,60}?\b(?:discount|offer|guarantee|trial|deal|promo(?:tion)?)\b|\b(?:the|its|their|our)\s+(?:[\w%+()-]+\s+){0,3}(?:discount|guarantee|trial|deal|promo(?:tion)?)\b/i;
+// A claim that already hedges the offer's market fit ("may not apply to the
+// India storefront") states the uncertainty itself - never flag it.
+const UNCERTAIN_OFFER_PATTERN = /\b(?:may|might|could)\s+not\s+(?:apply|be\s+(?:available|eligible|valid|redeemable))\b|\bnot\s+(?:yet\s+)?(?:verified|confirmed|available|eligible)\s+(?:for|in)\b/i;
+const MARKET_TERMS = [
+  { id: 'india', terms: ['india', 'indian'] },
+  { id: 'united states', terms: ['united states', 'usa', 'u.s.', 'america', 'american'] },
+  { id: 'united kingdom', terms: ['united kingdom', 'uk', 'britain', 'british', 'england'] },
+  { id: 'australia', terms: ['australia', 'australian'] },
+  { id: 'germany', terms: ['germany', 'german'] },
+  { id: 'france', terms: ['france', 'french'] },
+  { id: 'japan', terms: ['japan', 'japanese'] },
+  { id: 'mexico', terms: ['mexico', 'mexican'] },
+  { id: 'philippines', terms: ['philippines', 'philippine', 'filipino'] },
+  { id: 'canada', terms: ['canada', 'canadian'] },
+  { id: 'brazil', terms: ['brazil', 'brazilian'] },
+  { id: 'singapore', terms: ['singapore', 'singaporean'] },
+  { id: 'new zealand', terms: ['new zealand'] },
+  { id: 'south africa', terms: ['south africa', 'south african'] },
+  { id: 'uae', terms: ['uae', 'united arab emirates', 'dubai'] },
+];
+const REGION_TO_MARKET = { in: 'india', us: 'united states', gb: 'united kingdom', uk: 'united kingdom', au: 'australia', de: 'germany', fr: 'france', jp: 'japan', mx: 'mexico', ph: 'philippines', ca: 'canada', br: 'brazil', sg: 'singapore', nz: 'new zealand', za: 'south africa', ae: 'uae' };
+
+function marketIdOf(text) {
+  const lower = String(text || '').toLowerCase();
+  const hit = MARKET_TERMS.find(({ terms }) => terms.some((term) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lower)));
+  return hit ? MARKET_TERMS.indexOf(hit) : -1;
+}
+
+// Region marker from a source URL: a country-code path segment (nike.com/au/...)
+// or ccTLD (nike.in). Absence of a marker proves nothing - nike.com/help is a
+// global default - so only a positive marker for a DIFFERENT market counts.
+function sourceRegionMarket(url) {
+  try {
+    const parsed = new URL(url);
+    const tld = parsed.hostname.split('.').pop().toLowerCase();
+    if (REGION_TO_MARKET[tld]) return REGION_TO_MARKET[tld];
+    const segment = (parsed.pathname.split('/').filter(Boolean)[0] || '').toLowerCase();
+    if (REGION_TO_MARKET[segment]) return REGION_TO_MARKET[segment];
+  } catch { /* unparseable URLs carry no region signal */ }
+  return null;
+}
+
+function sourceMentionsMarket(source, marketIndex) {
+  if (marketIndex < 0) return false;
+  const market = MARKET_TERMS[marketIndex];
+  if (sourceRegionMarket(source?.url) === market.id) return true;
+  const text = normalizeForMatch(`${source?.title || ''} ${source?.snippet || ''}`).toLowerCase();
+  return market.terms.some((term) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
+}
 const UPCOMING_PATTERN = /\b(upcoming|coming soon|will (?:launch|roll out|release|introduce|debut)|soon|next (?:month|quarter|year)|later this year)\b/i;
 // Strong population/geography qualifiers an observed claim may not invent:
 // if the claim asserts one of these and no cited excerpt mentions it, the
@@ -80,7 +172,7 @@ function futureDatesIn(text, now) {
 }
 
 // Reviews one normalized claim in place. Returns adjustment/flag records.
-function reviewClaim(field, claim, sources, now, adjustments, flags) {
+function reviewClaim(field, claim, sources, now, adjustments, flags, context = {}) {
   if (!claim || typeof claim !== 'object' || !claim.statement) return;
   const statement = normalizeForMatch(claim.statement);
   const excerpts = normalizeForMatch(excerptText(sources, claim.sourceIds));
@@ -90,6 +182,11 @@ function reviewClaim(field, claim, sources, now, adjustments, flags) {
     // demote when the hedged word is the model's addition, absent from excerpts.
     if (hedge && !excerpts.toLowerCase().includes(hedge[0].toLowerCase())) {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'hedged-language', detail: hedge[0].toLowerCase() });
+      claim.evidenceType = 'inferred';
+    }
+    const inference = claim.evidenceType === 'observed' ? statement.match(INFERENTIAL_PATTERN) : null;
+    if (inference) {
+      adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'inferential-framing', detail: inference[0].toLowerCase() });
       claim.evidenceType = 'inferred';
     }
     const missing = claim.evidenceType === 'observed' ? missingQualifiers(statement, excerpts) : [];
@@ -113,30 +210,131 @@ function reviewClaim(field, claim, sources, now, adjustments, flags) {
       }
     }
   }
+  // Applies to every evidence type: an absolute is unsupported at any label.
+  const absolute = statement.match(ABSOLUTE_PATTERN);
+  if (absolute && !excerpts.toLowerCase().includes(absolute[0].toLowerCase())) {
+    flags.push({ field, reason: 'absolute-language', detail: absolute[0].toLowerCase(), checkedAt: now.toISOString() });
+  }
+  const marketIndex = marketIdOf(context.market);
+  const market = marketIndex >= 0 ? MARKET_TERMS[marketIndex] : null;
+  const marketLabel = market ? market.id.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+  const cited = (sources || []).filter((source) => (claim.sourceIds || []).includes(source?.id));
+  if (market && cited.length) {
+    // A positive region marker for a different market is a mismatch; an
+    // unmarked URL is a global default and stays silent.
+    const mismatched = cited.filter((source) => { const region = sourceRegionMarket(source?.url); return region && region !== market.id; });
+    if (mismatched.length) {
+      const detail = mismatched.map((source) => `${source.url} is specific to ${sourceRegionMarket(source.url)}, not ${marketLabel}`).join('; ');
+      flags.push({ field, reason: 'source-region-mismatch', detail, checkedAt: now.toISOString() });
+    }
+  }
+  // Copy, instruction, and measurement fields (differentiation, CTAs, concept,
+  // platform roles, phases, story, territories, KPIs, experiments, risks, kill
+  // criteria) flag existence-framed offer premises: "the concrete 10%
+  // discount" presupposes the discount whatever field carries it. Indefinite
+  // proposals ("test a 10% discount") stay silent everywhere, and measurement
+  // wording that explicitly names the offer as the proposal under test
+  // ("the proposed discount", "A/B test the offer") stays silent too.
+  const instructional = /^(kpis|experiments|risks|killCriteria)\[/.test(field) || COPY_FIELD_PATTERN.test(field);
+  const measurement = /^(kpis|experiments|risks|killCriteria)\[/.test(field);
+  const normalizedStatement = normalizeForMatch(statement);
+  const offerFramed = EXISTING_OFFER_PATTERN.test(normalizedStatement);
+  const hypotheticalOffer = HYPOTHETICAL_OFFER_PATTERN.test(normalizedStatement);
+  if (OFFER_PATTERN.test(normalizedStatement) && !UNCERTAIN_OFFER_PATTERN.test(normalizedStatement) && (!instructional || (offerFramed && !(measurement && hypotheticalOffer)))) {
+    const offerSources = cited.filter((source) => OFFER_PATTERN.test(normalizeForMatch(`${source?.title || ''} ${source?.snippet || ''}`)));
+    const globallyCovered = GLOBAL_MARKET_PATTERN.test(excerpts) && !OFFER_RESTRICTION_PATTERN.test(excerpts);
+    if (!offerSources.length) {
+      // An existing-offer premise with no offer evidence behind it - including
+      // the zero-citation case. Indefinite proposals stay silent.
+      if (offerFramed && !globallyCovered) {
+        flags.push({ field, reason: 'offer-premise-unsourced', detail: market ? `existing offer asserted without a cited source; not verified for ${marketLabel}` : 'existing offer asserted without a cited source', checkedAt: now.toISOString() });
+      }
+    } else if (market && !globallyCovered) {
+      // Coverage is checked per offer aspect: a source that places one aspect
+      // (free exchanges) in the market does not substantiate another aspect of
+      // the same claim (a discount) - co-citation cannot launder foreign offers.
+      const marketSources = offerSources.filter((source) => sourceMentionsMarket(source, marketIndex));
+      if (!marketSources.length) {
+        flags.push({ field, reason: 'offer-market-unverified', detail: `offer not verified for ${marketLabel}`, checkedAt: now.toISOString() });
+      } else {
+        const uncovered = OFFER_FACETS
+          .filter(([name, pattern]) => name !== 'offer or deal' && pattern.test(normalizedStatement))
+          .filter(([, pattern]) => !marketSources.some((source) => pattern.test(normalizeForMatch(`${source?.title || ''} ${source?.snippet || ''}`))))
+          .map(([name]) => name);
+        if (uncovered.length) {
+          flags.push({ field, reason: 'offer-market-unverified', detail: `no cited source places the ${uncovered.join(' or ')} in ${marketLabel}`, checkedAt: now.toISOString() });
+        }
+      }
+    }
+  }
 }
 
 const CLAIM_FIELDS = ['strategicProblem', 'audienceInsight', 'campaignThesis', 'currentPerception', 'desiredPerception', 'brandRole', 'coreMessage', 'creativePrinciple'];
 const CLAIM_LIST_FIELDS = ['supportingMessages', 'contentPillars', 'kpis', 'experiments', 'risks', 'killCriteria'];
+const AUDIENCE_LIST_FIELDS = ['segments', 'observedBehaviors', 'motivations', 'pains', 'desires', 'tensions', 'barriers', 'objections', 'triggers', 'identityDrivers', 'contentBehaviors', 'decisionFactors', 'momentsThatMatter', 'hypotheses', 'uncertainties'];
 
-// Applies the consistency floor to a normalized campaign. Mutates the campaign
-// and records every change in meta.labelAdjustments / meta.claimFlags.
-export function applyClaimConsistency(campaign, sources = [], now = new Date()) {
-  if (!campaign || typeof campaign !== 'object') return campaign;
+// Shared core: reviews the given claim fields and records every change in
+// meta.labelAdjustments / meta.claimFlags. Replace, never append: a fresh full
+// check re-derives every flag deterministically, so stale flags from a previous
+// generation drop out and re-running cannot duplicate entries.
+function applyConsistencyFloor(target, sources, now, context, { claims = [], lists = [] }) {
+  if (!target || typeof target !== 'object') return target;
   const adjustments = [];
   const flags = [];
-  for (const field of CLAIM_FIELDS) reviewClaim(field, campaign[field], sources, now, adjustments, flags);
-  for (const field of CLAIM_LIST_FIELDS) {
-    (Array.isArray(campaign[field]) ? campaign[field] : []).forEach((item, index) => reviewClaim(`${field}[${index}]`, item, sources, now, adjustments, flags));
+  for (const field of claims) reviewClaim(field, target[field], sources, now, adjustments, flags, context);
+  for (const field of lists) {
+    (Array.isArray(target[field]) ? target[field] : []).forEach((item, index) => reviewClaim(`${field}[${index}]`, item, sources, now, adjustments, flags, context));
   }
-  // Replace, never append: a fresh full-campaign check re-derives every flag
-  // deterministically, so stale flags from a previous generation drop out and
-  // re-running on an already-checked campaign cannot duplicate entries.
-  campaign.meta = { ...(campaign.meta || {}) };
-  delete campaign.meta.labelAdjustments;
-  delete campaign.meta.claimFlags;
-  delete campaign.meta.consistencyCheckedAt;
-  if (adjustments.length) campaign.meta.labelAdjustments = adjustments;
-  if (flags.length) campaign.meta.claimFlags = flags;
-  if (adjustments.length || flags.length) campaign.meta.consistencyCheckedAt = now.toISOString();
-  return campaign;
+  // Copy/instruction text is checked as flag-only pseudo-claims (no evidence
+  // label to demote): existence-framed offer premises and absolute language in
+  // consumer-facing or planning copy surface for review. Objects without these
+  // fields (audience profiles) no-op on the typeof guard.
+  const reviewCopy = (field, text, sourceIds) => {
+    if (typeof text === 'string' && text.trim()) reviewClaim(field, { statement: text, sourceIds: Array.isArray(sourceIds) ? sourceIds : [] }, sources, now, adjustments, flags, context);
+  };
+  reviewCopy('objectiveRationale', target.objectiveRationale);
+  reviewCopy('differentiation.notDo', target.differentiation?.notDo, target.differentiation?.sourceIds);
+  reviewCopy('differentiation.doInstead', target.differentiation?.doInstead, target.differentiation?.sourceIds);
+  reviewCopy('ctaStrategy.primary', target.ctaStrategy?.primary, target.ctaStrategy?.sourceIds);
+  reviewCopy('ctaStrategy.secondary', target.ctaStrategy?.secondary, target.ctaStrategy?.sourceIds);
+  reviewCopy('ctaStrategy.rationale', target.ctaStrategy?.rationale, target.ctaStrategy?.sourceIds);
+  const concept = target.campaignConcept;
+  if (concept && typeof concept === 'object') {
+    for (const key of ['campaignName', 'bigIdea', 'campaignThought', 'coreNarrative', 'emotionalPromise', 'brandRole', 'audienceRole', 'cta']) reviewCopy(`campaignConcept.${key}`, concept[key], concept.sourceIds);
+  }
+  (Array.isArray(target.storyArc) ? target.storyArc : []).forEach((item, index) => {
+    reviewCopy(`storyArc[${index}].stage`, item?.stage);
+    reviewCopy(`storyArc[${index}].description`, item?.description);
+  });
+  (Array.isArray(target.platformStrategy) ? target.platformStrategy : []).forEach((item, index) => {
+    for (const key of ['role', 'contentType', 'audienceBehavior', 'primaryKpi']) reviewCopy(`platformStrategy[${index}].${key}`, item?.[key], item?.sourceIds);
+  });
+  (Array.isArray(target.campaignPhases) ? target.campaignPhases : []).forEach((item, index) => {
+    for (const key of ['name', 'focus', 'description']) reviewCopy(`campaignPhases[${index}].${key}`, item?.[key]);
+  });
+  (Array.isArray(target.creativeTerritories) ? target.creativeTerritories : []).forEach((item, index) => {
+    for (const key of ['name', 'coreThought', 'emotionalDirection', 'audienceRelevance', 'brandRelevance']) reviewCopy(`creativeTerritories[${index}].${key}`, item?.[key], item?.sourceIds);
+  });
+
+  target.meta = { ...(target.meta || {}) };
+  delete target.meta.labelAdjustments;
+  delete target.meta.claimFlags;
+  delete target.meta.consistencyCheckedAt;
+  if (adjustments.length) target.meta.labelAdjustments = adjustments;
+  if (flags.length) target.meta.claimFlags = flags;
+  if (adjustments.length || flags.length) target.meta.consistencyCheckedAt = now.toISOString();
+  return target;
+}
+
+// Applies the consistency floor to a normalized campaign.
+export function applyClaimConsistency(campaign, sources = [], now = new Date(), context = {}) {
+  return applyConsistencyFloor(campaign, sources, now, context, { claims: CLAIM_FIELDS, lists: CLAIM_LIST_FIELDS });
+}
+
+// Applies the same floor to a normalized audience profile. Audience items are
+// already evidence-normalized (uncertainties state unknowns, observed items
+// carry citations); the floor adds the deterministic review flags on top and
+// never rewrites claim text.
+export function applyAudienceClaimConsistency(profile, sources = [], now = new Date(), context = {}) {
+  return applyConsistencyFloor(profile, sources, now, context, { lists: AUDIENCE_LIST_FIELDS });
 }

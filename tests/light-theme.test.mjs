@@ -60,3 +60,28 @@ test('light theme darkens emotion chips for contrast', () => {
   const pattern = /:root\[data-theme="light"\][^{]*\.emotion-list span[^{]*\{[^}]*color:\s*#4a6a24/;
   assert.ok(pattern.test(css), 'missing light contrast override for .emotion-list span');
 });
+
+// WCAG AA regression: the light-theme muted token carries small helper text
+// (e.g. compare-help microcopy) on page and card surfaces. It must hold 4.5:1
+// against every light surface it can sit on.
+function srgbLuminance(hex) {
+  const channel = (i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+function contrastRatio(fg, bg) {
+  const [hi, lo] = [srgbLuminance(fg), srgbLuminance(bg)].sort((a, b) => b - a);
+  return (hi + 0.05) / (lo + 0.05);
+}
+function lightToken(name) {
+  const block = css.match(/:root\[data-theme="light"\] \{(?<body>[\s\S]*?)\n\}/).groups.body;
+  return block.match(new RegExp(`--${name}:\\s*(?<value>#[0-9a-f]{6})`, 'i')).groups.value;
+}
+for (const surface of ['bg', 'surface', 'surface-secondary', 'surface-tertiary']) {
+  test(`light --muted meets WCAG AA on --${surface}`, () => {
+    const ratio = contrastRatio(lightToken('muted'), lightToken(surface));
+    assert.ok(ratio >= 4.5, `--muted on --${surface} is ${ratio.toFixed(2)}:1, needs >= 4.5:1`);
+  });
+}

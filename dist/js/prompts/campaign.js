@@ -165,6 +165,7 @@ function outputContract(scope) {
   if (scope === 'territories') return { creativeTerritories: common.creativeTerritories, selectedCreativeTerritoryId: common.selectedCreativeTerritoryId };
   if (scope === 'concept') return { campaignConcept: common.campaignConcept, creativePrinciple: common.creativePrinciple, emotionalTerritory: common.emotionalTerritory };
   if (scope === 'channels') return { storyArc: common.storyArc, platformStrategy: common.platformStrategy, contentPillars: common.contentPillars, ctaStrategy: common.ctaStrategy, campaignPhases: common.campaignPhases, kpis: common.kpis, experiments: common.experiments };
+  if (scope === 'measurement') return { kpis: common.kpis, experiments: common.experiments, risks: common.risks, killCriteria: common.killCriteria };
   if (scope === 'foundation') return Object.fromEntries(Object.entries(common).slice(0, 18));
   return common;
 }

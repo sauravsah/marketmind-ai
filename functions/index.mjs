@@ -16,6 +16,6 @@ export const beforeUserCreated = registerBeforeUserCreated(
     });
     if (decision.allowed) return;
 
-    throw new HttpsError('permission-denied', 'MarketMind is currently invite-only. Contact the beta administrator for access.');
+    throw new HttpsError('permission-denied', 'MarketMind is in an invite-only pilot. Your account is registered, but research and generation access is not turned on for it yet. Access is added by hand in small waves as seats open.');
   },
 );
