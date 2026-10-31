@@ -241,11 +241,26 @@ export async function authenticatedFetch(input, init = {}) {
   };
   let token = await user.getIdToken(false);
   let response = await send(token);
-  // Retry only for the same signed-in user, never a replacement account.
+  // Retry once with a forced refresh for the same signed-in user, never a
+  // replacement account.
   if (response.status === 401 && token) {
     assertCurrent();
     token = await user.getIdToken(true);
     if (token) response = await send(token);
+    return response;
+  }
+  // A 403 while the cached token's email_verified claim is still false is the
+  // stale pre-verification window: the user verified (claim updates on
+  // refresh) but the hour-cached token predates it. Refresh once and retry so
+  // they reach the real outcome. Other 403s (the invite-only gate) skip the
+  // retry, so non-idempotent requests are never re-sent after them.
+  if (response.status === 403 && token && typeof user.getIdTokenResult === 'function') {
+    assertCurrent();
+    const claims = (await user.getIdTokenResult())?.claims;
+    if (claims && claims.email_verified === false) {
+      token = await user.getIdToken(true);
+      if (token) response = await send(token);
+    }
   }
   return response;
 }
