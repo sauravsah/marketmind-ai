@@ -39,3 +39,41 @@ test('account switch before client-await resolution cannot choose the replacemen
   await assert.rejects(pending, { name: 'AbortError' }); assert.equal(sends, 0);
  } finally { globalThis.fetch = original; }
 });
+
+test('403 with stale unverified token claim retries once with a forced refresh (freshly verified email)', async () => {
+ const original = globalThis.fetch; let sends = 0; const seen = [];
+ const user = { getIdToken: async (force) => (force ? 'fresh' : 'stale'), getIdTokenResult: async () => ({ claims: { email_verified: false } }) };
+ auth.inject({ auth: { currentUser: user } });
+ globalThis.fetch = async (input, init) => {
+  sends++; seen.push(init.headers.get('Authorization'));
+  const fresh = init.headers.get('Authorization') === 'Bearer fresh';
+  return new Response(fresh ? '{"ok":true}' : '{"error":"Verify your email before using the MarketMind workspace."}', { status: fresh ? 200 : 403 });
+ };
+ try {
+  const response = await auth.authenticatedFetch('/api/research/stream', { method: 'POST' });
+  assert.equal(response.status, 200); assert.equal(sends, 2);
+  assert.deepEqual(seen, ['Bearer stale', 'Bearer fresh']);
+ } finally { globalThis.fetch = original; }
+});
+
+test('403 with a verified token claim (invite-only gate) is returned without any retry or re-send', async () => {
+ const original = globalThis.fetch; let sends = 0; let refreshes = 0;
+ const user = { getIdToken: async (force) => { if (force) refreshes++; return 'tok'; }, getIdTokenResult: async () => ({ claims: { email_verified: true } }) };
+ auth.inject({ auth: { currentUser: user } });
+ globalThis.fetch = async () => { sends++; return new Response('{"error":"MarketMind is in an invite-only pilot."}', { status: 403 }); };
+ try {
+  const response = await auth.authenticatedFetch('/api/research/stream', { method: 'POST' });
+  assert.equal(response.status, 403); assert.equal(sends, 1); assert.equal(refreshes, 0);
+ } finally { globalThis.fetch = original; }
+});
+
+test('403 retry on a still-unverified account returns the 403 after a single forced refresh', async () => {
+ const original = globalThis.fetch; let sends = 0;
+ const user = { getIdToken: async (force) => (force ? 'fresh' : 'stale'), getIdTokenResult: async () => ({ claims: { email_verified: false } }) };
+ auth.inject({ auth: { currentUser: user } });
+ globalThis.fetch = async () => { sends++; return new Response('{"error":"Verify your email before using the MarketMind workspace."}', { status: 403 }); };
+ try {
+  const response = await auth.authenticatedFetch('/api/research/stream', { method: 'POST' });
+  assert.equal(response.status, 403); assert.equal(sends, 2);
+ } finally { globalThis.fetch = original; }
+});
