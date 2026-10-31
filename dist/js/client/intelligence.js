@@ -70,3 +70,33 @@ export function researchIsStale(timestamp, now = new Date(), thresholdDays = 30)
   const age = now.getTime() - new Date(timestamp).getTime();
   return Number.isFinite(age) && age > thresholdDays * 86400000;
 }
+
+export function campaignFreshness(strategy = {}, now = new Date()) {
+  const campaign = strategy?.campaignStrategy || null;
+  const radar = strategy?.opportunityRadar || null;
+  const researchedAt = strategy?.research?.meta?.researchedAt || null;
+  const newer = (a, b) => Boolean(a && b && new Date(a).getTime() > new Date(b).getTime());
+  if (!campaign || campaign.meta?.status !== 'ready') return { needsReview: false, reasons: [], developedFor: null };
+  const reasons = [];
+  const developedFor = campaign.opportunityId
+    ? (radar?.opportunities || []).find((item) => item.id === campaign.opportunityId) || null
+    : null;
+  if (campaign.opportunityId && strategy.selectedOpportunityId && campaign.opportunityId !== strategy.selectedOpportunityId) reasons.push('opportunity-mismatch');
+  if (newer(researchedAt, campaign.meta?.researchTimestamp)) reasons.push('newer-research');
+  if (newer(radar?.createdAt, campaign.meta?.opportunityTimestamp)) reasons.push('newer-radar');
+  return { needsReview: reasons.length > 0, reasons, developedFor };
+}
+
+export function journeyStageReview(strategy = {}, now = new Date()) {
+  const research = strategy?.research || {};
+  const researchedAt = research.meta?.researchedAt || null;
+  const audience = strategy?.audienceInsights || null;
+  const radar = strategy?.opportunityRadar || null;
+  const newer = (a, b) => Boolean(a && b && new Date(a).getTime() > new Date(b).getTime());
+  return {
+    research: Boolean(researchedAt && researchIsStale(researchedAt, now)),
+    audience: Boolean(audience && newer(researchedAt, audience.researchVersion)),
+    radar: Boolean(radar && (radar.meta?.stale || newer(researchedAt, radar.researchTimestamp) || (radar.researchTimestamp && researchIsStale(radar.researchTimestamp, now)))),
+    campaign: campaignFreshness(strategy, now).needsReview,
+  };
+}
