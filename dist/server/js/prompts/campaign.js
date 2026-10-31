@@ -119,6 +119,7 @@ function guardrails() {
     'Use the selected opportunity as the only strategic starting point and connect every major claim to supplied market, audience, opportunity, or brand evidence.',
     'Treat interpretations as interpretations and strategic directions as hypotheses. Preserve evidenceType, confidence, uncertainty, and sourceIds.',
     ...EVIDENCE_DISCIPLINE_RULES,
+    'Supporting message and pillar copy is persuasion addressed to the audience, never an observed fact; reserve observed for sourced factual claims.',
     'Every sourceId must match a supplied source packet. Never invent sources, statistics, customer quotes, personas, competitor behavior, urgency, or benchmarks.',
     'Respect the supplied Brand Voice Studio tone, personality, preferred words, avoided words, examples, and strictness. Keep the strategy strategic; do not write production assets.',
     'Do not generate captions, posts, ad copy, video scripts, image prompts, shot lists, storyboards, content calendars, music recommendations, or publishing plans.',

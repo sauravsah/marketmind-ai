@@ -67,6 +67,7 @@ const state = {
   cloud: { status: 'idle', repository: null, error: null, userId: null },
   migration: { status: 'idle', summary: null, error: null },
   betaFeedback: { open: false, sending: false, error: null },
+  accessRequest: { open: false, sending: false, sent: false, error: null },
 };
 
 const activeRequests = new Map();
@@ -269,6 +270,15 @@ function betaFeedbackModal() {
   return `<div class="feedback-overlay" data-action="close-feedback"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-title" data-feedback-dialog><button class="modal-close" type="button" aria-label="Close feedback" data-action="close-feedback">${icon('close', 17)}</button><div class="eyebrow">BETA FEEDBACK</div><h2 id="feedback-title">Help us make the next move clearer.</h2><p>Share a short note about what worked, what felt confusing, or what you would change.</p>${state.betaFeedback.error ? `<div class="form-feedback error" role="alert">${escapeHtml(state.betaFeedback.error)}</div>` : ''}<form id="beta-feedback-form"><label for="feedback-category">Feedback type</label><select id="feedback-category" name="category" required><option value="bug">Something is broken</option><option value="confusing">Something is confusing</option><option value="idea">I have an idea</option><option value="praise">Something worked well</option><option value="other">Other</option></select><label for="feedback-message">Your note</label><textarea id="feedback-message" name="message" rows="5" maxlength="1200" required placeholder="What should we know?"></textarea><div class="feedback-dialog-actions"><button class="button button-secondary" type="button" data-action="close-feedback">Cancel</button><button class="button button-primary" type="submit" ${state.betaFeedback.sending ? 'disabled' : ''}>${state.betaFeedback.sending ? 'Sending…' : 'Send feedback'} ${icon('arrow', 15)}</button></div></form></section></div>`;
 }
 
+function accessRequestModal() {
+  if (!state.accessRequest.open) return '';
+  const email = state.auth.user?.email || '';
+  const body = state.accessRequest.sent
+    ? `<p>Request received. Your account email (${escapeHtml(email)}) is in the beta administrator's review queue. Access is added by hand in small waves, so there is no fixed wait we can promise. When your seat is switched on, research and generation start working on this account - no need to sign up again.</p><div class="feedback-dialog-actions"><button class="button button-primary" type="button" data-action="close-access-request">Done</button></div>`
+    : `<p>MarketMind is in an invite-only pilot. Your account is registered, but research and generation are not turned on for it yet.</p><p>Request a seat and your account email (${escapeHtml(email)}) goes to the beta administrator's review queue. Requesting does not change access by itself - seats are switched on by hand.</p>${state.accessRequest.error ? `<div class="form-feedback error" role="alert">${escapeHtml(state.accessRequest.error)}</div>` : ''}<div class="feedback-dialog-actions"><button class="button button-secondary" type="button" data-action="close-access-request">Not now</button><button class="button button-primary" type="button" data-action="submit-access-request" ${state.accessRequest.sending ? 'disabled' : ''}>${state.accessRequest.sending ? 'Sending…' : 'Request access'} ${icon('arrow', 15)}</button></div>`;
+  return `<div class="feedback-overlay" data-action="close-access-request"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="access-request-title" data-access-request-dialog><button class="modal-close" type="button" aria-label="Close access request" data-action="close-access-request">${icon('close', 17)}</button><div class="eyebrow">INVITE-ONLY PILOT</div><h2 id="access-request-title">Request a pilot seat.</h2>${body}</section></div>`;
+}
+
 function renderPublic() {
   root.innerHTML = state.page === 'landing' ? landingPage() : authPage(state.page);
   attachPublicEvents();
@@ -302,6 +312,7 @@ function resetAccountState(userId) {
   state.compareTerritoryIds = []; state.compareOpportunityIds = []; state.openOpportunityId = null;
   state.audienceEditingClaimId = state.audienceValidationClaimId = null;
   state.betaFeedback = { open: false, sending: false, error: null };
+  state.accessRequest = { open: false, sending: false, sent: false, error: null };
 }
 
 async function loadCloudWorkspace() {
@@ -587,7 +598,7 @@ function renderShell(content) {
         </header>
         <div class="page-wrap">${workspaceSyncNotice}${progressionRail()}${content}</div>
       </main>
-      <div id="toast-region" class="toast-region" aria-live="polite"></div>${betaFeedbackModal()}
+      <div id="toast-region" class="toast-region" aria-live="polite"></div>${betaFeedbackModal()}${accessRequestModal()}
     </div>`);
   attachGlobalEvents();
 }
@@ -811,7 +822,7 @@ function researchResultsPage() {
     ['themes', research.emergingThemes.length, 'emerging themes'],
     ['competitors', research.competitorSignals.length, 'competitor movements'],
   ];
-  return `<div class="research-page page-entrance"><div class="page-header research-header"><div><div class="eyebrow">MARKET INTELLIGENCE · ${escapeHtml(capitalize(research.meta?.depth || 'balanced'))} DEPTH</div><h1>Here's what is<br><em>happening around you.</em></h1><p>${escapeHtml(state.strategy.idea)}</p></div><div class="research-header-actions"><button class="button button-secondary" type="button" data-action="refresh-research" ${state.researchRun?.loading ? 'disabled' : ''}>${icon('refresh', 16)} Refresh research</button><button class="button button-secondary" type="button" data-action="save-research">${icon('check', 16)} Save to strategy</button><button class="button button-primary" type="button" data-route="audience">${icon('message', 16)} Understand audience</button></div></div><div class="research-meta-line"><span>${escapeHtml(state.strategy.market || 'Market not specified')}</span><span>·</span><span>Last researched: ${research.meta?.researchedAt ? formatDateTime(research.meta.researchedAt) : 'Not yet'}</span><span>·</span><span>${capitalize(research.meta?.depth || 'balanced')} depth</span></div>${researchIntegrityNote(research)}<section class="research-snapshot"><div class="snapshot-lead"><div class="eyebrow">RESEARCH SNAPSHOT</div><h2>Evidence before<br><em>assumptions.</em></h2><p>Every factual signal below is mapped to a source. Interpretations are clearly separated.</p></div><div class="snapshot-metrics">${metricData.map(([id, value, label]) => `<div class="snapshot-metric"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div></section><section class="research-summary"><div class="summary-label"><span class="summary-index">01</span><div><div class="eyebrow">RESEARCH SUMMARY</div><h2>What's happening?</h2></div></div><p>${escapeHtml(research.researchSummary || 'No synthesized summary is available. Configure an AI provider to turn the collected evidence into a grounded market view.')}</p>${research.meta?.aiStatus !== 'verified' ? `<div class="summary-note">${icon('lock', 14)} <span>${escapeHtml(research.meta?.warnings?.[0] || 'AI synthesis is not configured. Evidence is shown without invented conclusions.')}</span></div>` : ''}</section>${research.emergingThemes.length ? themesSection(research.emergingThemes, research.sources) : ''}<section class="signals-section"><div class="signals-heading"><div><div class="eyebrow">OBSERVED SIGNALS</div><h2>Read the field.</h2></div><div class="signal-count">${signals.length} shown</div></div><div class="filter-bar" role="tablist" aria-label="Filter research signals">${RESEARCH_FILTERS.map((filter) => `<button class="filter-tab ${state.researchFilter === filter.id ? 'active' : ''}" type="button" data-filter="${filter.id}" role="tab" aria-selected="${state.researchFilter === filter.id}">${filter.label}</button>`).join('')}</div>${signals.length ? `<div class="signal-list">${signals.map((signal) => signalCard(signal, research.sources)).join('')}</div>` : `<div class="research-no-signals"><div class="empty-icon">${icon('radar', 19)}</div><div><strong>${all.length ? 'No signals in this view' : 'No synthesized signals yet'}</strong><p>${all.length ? 'Try another category filter.' : 'Live evidence is available, but an AI provider has not synthesized it into signals yet.'}</p></div></div>`}</section>${research.contradictions.length ? contradictionsSection(research.contradictions, research.sources) : ''}<section class="sources-section"><div class="signals-heading"><div><div class="eyebrow">EVIDENCE TRAIL</div><h2>Sources reviewed.</h2></div><div class="signal-count">${research.sources.length} total</div></div><div class="source-grid">${research.sources.length ? research.sources.map(sourceRow).join('') : '<p class="muted-copy">No sources were returned.</p>'}</div></section>${researchRunHistorySection(research)}${researchHistorySection()}${state.selectedSource ? sourceModal(state.selectedSource, research.sources) : ''}</div>`;
+  return `<div class="research-page page-entrance"><div class="page-header research-header"><div><div class="eyebrow">MARKET INTELLIGENCE · ${escapeHtml(capitalize(research.meta?.depth || 'balanced'))} DEPTH</div><h1>Here's what is<br><em>happening around you.</em></h1><p>${escapeHtml(state.strategy.idea)}</p></div><div class="research-header-actions"><button class="button button-secondary" type="button" data-action="refresh-research" ${state.researchRun?.loading ? 'disabled' : ''}>${icon('refresh', 16)} Refresh research</button><button class="button button-secondary" type="button" data-action="save-research">${icon('check', 16)} Save to strategy</button><button class="button button-primary" type="button" data-route="audience">${icon('message', 16)} Understand audience</button></div></div><div class="research-meta-line"><span>${escapeHtml(state.strategy.market || 'Market not specified')}</span><span>·</span><span>Last researched: ${research.meta?.researchedAt ? formatDateTime(research.meta.researchedAt) : 'Not yet'}</span><span>·</span><span>${capitalize(research.meta?.depth || 'balanced')} depth</span></div>${researchIntegrityNote(research)}${campaignReviewBanner(research)}<section class="research-snapshot"><div class="snapshot-lead"><div class="eyebrow">RESEARCH SNAPSHOT</div><h2>Evidence before<br><em>assumptions.</em></h2><p>Every factual signal below is mapped to a source. Interpretations are clearly separated.</p></div><div class="snapshot-metrics">${metricData.map(([id, value, label]) => `<div class="snapshot-metric"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div></section><section class="research-summary"><div class="summary-label"><span class="summary-index">01</span><div><div class="eyebrow">RESEARCH SUMMARY</div><h2>What's happening?</h2></div></div><p>${escapeHtml(research.researchSummary || 'No synthesized summary is available. Configure an AI provider to turn the collected evidence into a grounded market view.')}</p>${research.meta?.aiStatus !== 'verified' ? `<div class="summary-note">${icon('lock', 14)} <span>${escapeHtml(research.meta?.warnings?.[0] || 'AI synthesis is not configured. Evidence is shown without invented conclusions.')}</span></div>` : ''}</section>${research.emergingThemes.length ? themesSection(research.emergingThemes, research.sources) : ''}<section class="signals-section"><div class="signals-heading"><div><div class="eyebrow">OBSERVED SIGNALS</div><h2>Read the field.</h2></div><div class="signal-count">${signals.length} shown</div></div><div class="filter-bar" role="tablist" aria-label="Filter research signals">${RESEARCH_FILTERS.map((filter) => `<button class="filter-tab ${state.researchFilter === filter.id ? 'active' : ''}" type="button" data-filter="${filter.id}" role="tab" aria-selected="${state.researchFilter === filter.id}">${filter.label}</button>`).join('')}</div>${signals.length ? `<div class="signal-list">${signals.map((signal) => signalCard(signal, research.sources)).join('')}</div>` : `<div class="research-no-signals"><div class="empty-icon">${icon('radar', 19)}</div><div><strong>${all.length ? 'No signals in this view' : 'No synthesized signals yet'}</strong><p>${all.length ? 'Try another category filter.' : 'Live evidence is available, but an AI provider has not synthesized it into signals yet.'}</p></div></div>`}</section>${research.contradictions.length ? contradictionsSection(research.contradictions, research.sources) : ''}<section class="sources-section"><div class="signals-heading"><div><div class="eyebrow">EVIDENCE TRAIL</div><h2>Sources reviewed.</h2></div><div class="signal-count">${research.sources.length} total</div></div><div class="source-grid">${research.sources.length ? research.sources.map(sourceRow).join('') : '<p class="muted-copy">No sources were returned.</p>'}</div></section>${researchRunHistorySection(research)}${researchHistorySection()}${state.selectedSource ? sourceModal(state.selectedSource, research.sources) : ''}</div>`;
 }
 
 function currentAudienceScope() {
@@ -1007,13 +1018,32 @@ function opportunityResultsPage() {
   const exploratory = opportunities.filter((opportunity) => opportunity.confidence === 'low').length;
   const stale = Boolean(radar.meta?.stale || (radar.researchTimestamp && currentResearch().meta?.researchedAt && new Date(currentResearch().meta.researchedAt) > new Date(radar.researchTimestamp)) || researchIsStale(radar.researchTimestamp));
   const contradictionCount = radar.meta?.contradictionsConsidered?.length || 0;
-  return `<div class="radar-page page-entrance"><div class="page-header radar-header radar-results-header"><div><div class="eyebrow">OPPORTUNITY RADAR · ${escapeHtml(capitalize(radar.lens || 'balanced'))} LENS</div><h1>Where the signal<br><em>becomes direction.</em></h1><p>Where market signals, audience needs and brand strengths intersect.</p></div><div class="research-header-actions"><button class="button button-secondary" type="button" data-action="find-more-opportunities">${icon('refresh', 16)} Find More Opportunities</button><button class="button button-primary" type="button" data-route="audience">${icon('message', 16)} Review audience</button></div></div>${stale ? `<div class="radar-stale-banner">${icon('clock', 15)} <span>Research may be stale. Refresh Market Intelligence before treating these assessments as current.</span><button class="text-button" type="button" data-route="research">Refresh Market Intelligence ${icon('arrow', 14)}</button></div>` : ''}<div class="research-meta-line"><span>${opportunities.length} potential opportunities</span><span>·</span><span>${high} high-confidence</span><span>·</span><span>${medium} medium-confidence</span><span>·</span><span>${exploratory} exploratory</span><span>·</span><span>${contradictionCount} contradictions considered</span></div><section class="radar-summary"><div class="radar-summary-lead"><div class="eyebrow">OPPORTUNITY SUMMARY</div><h2>${opportunities.length} potential opportunit${opportunities.length === 1 ? 'y' : 'ies'}<br><em>worth exploring.</em></h2><p>These are strategic hypotheses, not guarantees. Scores show a MarketMind assessment based on the available evidence.</p></div><div class="radar-summary-stats"><div><strong>${high}</strong><span>High confidence</span></div><div><strong>${medium}</strong><span>Medium confidence</span></div><div><strong>${exploratory}</strong><span>Exploratory</span></div><div><strong>${sources.length}</strong><span>Sources used</span></div></div></section><div class="opportunity-toolbar"><div><div class="eyebrow">STRATEGIC LENS</div><select id="results-opportunity-lens">${OPPORTUNITY_LENS_OPTIONS.map((option) => `<option value="${option.id}" ${(radar.lens || 'balanced') === option.id ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div><div class="compare-help">${state.compareOpportunityIds.length >= 2 ? `<span>${state.compareOpportunityIds.length} selected for comparison</span>` : '<span>Select two or more to compare.</span>'}</div></div>${compareOpportunities(opportunities)}<section class="opportunity-list"><div class="signals-heading"><div><div class="eyebrow">RANKED TERRITORIES</div><h2>Potential opportunities.</h2></div><div class="signal-count">${opportunities.length} returned</div></div>${opportunities.map((opportunity, index) => opportunityCard(opportunity, index + 1, sources)).join('')}</section>${state.selectedSource ? sourceModal(state.selectedSource, sources) : ''}</div>`;
+  return `<div class="radar-page page-entrance"><div class="page-header radar-header radar-results-header"><div><div class="eyebrow">OPPORTUNITY RADAR · ${escapeHtml(capitalize(radar.lens || 'balanced'))} LENS</div><h1>Where the signal<br><em>becomes direction.</em></h1><p>Where market signals, audience needs and brand strengths intersect.</p></div><div class="research-header-actions"><button class="button button-secondary" type="button" data-action="find-more-opportunities">${icon('refresh', 16)} Find More Opportunities</button><button class="button button-primary" type="button" data-route="audience">${icon('message', 16)} Review audience</button></div></div>${stale ? `<div class="radar-stale-banner">${icon('clock', 15)} <span>Research may be stale. Refresh Market Intelligence before treating these assessments as current.</span><button class="text-button" type="button" data-route="research">Refresh Market Intelligence ${icon('arrow', 14)}</button></div>` : ''}${campaignReviewBanner(radar)}<div class="research-meta-line"><span>${opportunities.length} potential opportunities</span><span>·</span><span>${high} high-confidence</span><span>·</span><span>${medium} medium-confidence</span><span>·</span><span>${exploratory} exploratory</span><span>·</span><span>${contradictionCount} contradictions considered</span></div><section class="radar-summary"><div class="radar-summary-lead"><div class="eyebrow">OPPORTUNITY SUMMARY</div><h2>${opportunities.length} potential opportunit${opportunities.length === 1 ? 'y' : 'ies'}<br><em>worth exploring.</em></h2><p>These are strategic hypotheses, not guarantees. Scores show a MarketMind assessment based on the available evidence.</p></div><div class="radar-summary-stats"><div><strong>${high}</strong><span>High confidence</span></div><div><strong>${medium}</strong><span>Medium confidence</span></div><div><strong>${exploratory}</strong><span>Exploratory</span></div><div><strong>${sources.length}</strong><span>Sources used</span></div></div></section><div class="opportunity-toolbar"><div><div class="eyebrow">STRATEGIC LENS</div><select id="results-opportunity-lens">${OPPORTUNITY_LENS_OPTIONS.map((option) => `<option value="${option.id}" ${(radar.lens || 'balanced') === option.id ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div><div class="compare-help">${state.compareOpportunityIds.length >= 2 ? `<span>${state.compareOpportunityIds.length} selected for comparison</span>` : '<span>Select two or more to compare.</span>'}</div></div>${compareOpportunities(opportunities)}<section class="opportunity-list"><div class="signals-heading"><div><div class="eyebrow">RANKED TERRITORIES</div><h2>Potential opportunities.</h2></div><div class="signal-count">${opportunities.length} returned</div></div>${opportunities.map((opportunity, index) => opportunityCard(opportunity, index + 1, sources)).join('')}</section>${state.selectedSource ? sourceModal(state.selectedSource, sources) : ''}</div>`;
+}
+
+function opportunityReviewBanner(opportunity) {
+  const radar = currentOpportunityRadar();
+  const flags = Array.isArray(radar?.meta?.claimFlags) ? radar.meta.claimFlags : [];
+  const adjustments = Array.isArray(radar?.meta?.labelAdjustments) ? radar.meta.labelAdjustments : [];
+  if (!flags.length && !adjustments.length) return '';
+  const index = (radar.opportunities || []).findIndex((item) => item?.id === opportunity.id);
+  if (index < 0) return '';
+  const prefix = `opportunities[${index}]`;
+  const subLabels = { timing: 'Timing', strategicThesis: 'Strategic thesis', oneLineDescription: 'Summary line' };
+  const titled = (field) => {
+    const sub = subLabels[String(field || '').slice(prefix.length + 1)] || 'Claim';
+    return `"${opportunity.title}" · ${sub}`;
+  };
+  return campaignReviewBanner({ meta: {
+    claimFlags: flags.filter((flag) => String(flag.field || '').startsWith(prefix)).map((flag) => ({ ...flag, field: titled(flag.field) })),
+    labelAdjustments: adjustments.filter((adjustment) => String(adjustment.field || '').startsWith(prefix)).map((adjustment) => ({ ...adjustment, field: titled(adjustment.field) })),
+  } });
 }
 
 function opportunityDetailPage(opportunity) {
   const sources = currentResearch().sources || [];
   const status = opportunity.status || 'exploring';
-  return `<div class="radar-page page-entrance"><div class="detail-back"><button class="text-button" type="button" data-action="back-to-radar">${icon('arrow', 16)} Back to Opportunity Radar</button></div><div class="opportunity-detail-header"><div><div class="eyebrow">OPPORTUNITY · ${escapeHtml(capitalize(opportunity.type))}</div><h1>${escapeHtml(opportunity.title)}</h1><p>${escapeHtml(opportunity.oneLineDescription || '')}</p></div><div class="opportunity-detail-actions"><span class="opportunity-status-tag">${escapeHtml(capitalize(status))}</span><button class="button button-secondary" type="button" data-action="set-opportunity-status" data-status="selected" data-id="${escapeHtml(opportunity.id)}">${icon('check', 15)} Select</button><button class="quiet-button" type="button" data-action="set-opportunity-status" data-status="rejected" data-id="${escapeHtml(opportunity.id)}">Reject</button><button class="button button-primary" type="button" data-action="develop-campaign" data-id="${escapeHtml(opportunity.id)}">${icon('layers', 15)} Develop Campaign</button></div></div><section class="detail-thesis"><div class="eyebrow">STRATEGIC THESIS · HYPOTHESIS</div><h2>${escapeHtml(opportunity.strategicThesis)}</h2><p>This is a strategic hypothesis to explore, not a prediction of success.</p></section><section class="detail-chain"><div class="eyebrow">WHY THIS OPPORTUNITY EXISTS</div><h2>Follow the evidence chain.</h2><div class="evidence-chain"><div class="chain-step"><span>01</span><div><div class="eyebrow">MARKET SIGNALS</div>${(opportunity.marketSignals || []).length ? opportunity.marketSignals.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">No market signal was mapped.</p>'}</div></div><div class="chain-arrow">↓</div><div class="chain-step"><span>02</span><div><div class="eyebrow">AUDIENCE SIGNALS</div>${(opportunity.audienceSignals || []).length ? opportunity.audienceSignals.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">No audience signal was mapped.</p>'}</div></div><div class="chain-arrow">↓</div><div class="chain-step"><span>03</span><div><div class="eyebrow">BRAND RELEVANCE</div><div class="detail-object"><span class="evidence-badge evidence-${escapeHtml(opportunity.brandFit?.evidenceType || 'unknown')}"><i></i>${escapeHtml(capitalize(opportunity.brandFit?.evidenceType || 'unknown'))}</span><p>${escapeHtml(opportunity.brandFit?.explanation || 'Brand fit remains uncertain.')}</p>${opportunityEvidenceButtons([opportunity.brandFit], sources)}</div></div></div><div class="chain-arrow">↓</div><div class="chain-step"><span>04</span><div><div class="eyebrow">OPPORTUNITY</div><div class="detail-object opportunity-object"><span class="evidence-badge evidence-hypothesis"><i></i>Hypothesis</span><p>${escapeHtml(opportunity.oneLineDescription || opportunity.strategicThesis)}</p></div></div></div></div></section><section class="detail-card competitive-detail"><div class="eyebrow">COMPETITIVE CONTEXT</div><h2>What the category appears to occupy.</h2><p>${escapeHtml(opportunity.competitiveContext?.summary || 'Competitive evidence is limited.')}</p>${opportunityEvidenceButtons([opportunity.competitiveContext], sources)}</section><div class="detail-two-column"><section class="detail-card"><div class="eyebrow">WHY NOW</div><h2>${escapeHtml(capitalize(opportunity.timing?.level || 'unknown'))}</h2><p>${escapeHtml(opportunity.timing?.explanation || 'Timing is unknown from the available evidence.')}</p>${opportunityEvidenceButtons([opportunity.timing], sources)}</section><section class="detail-card"><div class="eyebrow">POTENTIAL WHITESPACE</div><h2>Worth exploring</h2><p>${escapeHtml(opportunity.whitespace?.statement || 'No potential whitespace was supported by the current evidence.')}</p>${opportunityEvidenceButtons([opportunity.whitespace], sources)}</section></div>${opportunity.contradictions?.length ? `<section class="detail-card contradiction-detail"><div class="eyebrow">CONTRADICTIONS TO HOLD</div><h2>Evidence is mixed.</h2>${opportunity.contradictions.map((item) => opportunityEvidenceRow(item, sources)).join('')}</section>` : ''}<section class="assessment-card"><div><div class="eyebrow">MARKETMIND ASSESSMENT</div><h2>${opportunity.scores?.overall || 0}<small>/100</small></h2><p>AI assessment based on available evidence. Not a probability of success.</p></div><div class="score-breakdown">${[['Audience relevance','audienceRelevance'],['Brand fit','brandFit'],['Evidence strength','evidenceStrength'],['Timing','timing'],['Competitive whitespace','competitiveWhitespace'],['Actionability','actionability']].map(([label, key]) => `<div><span>${label}</span><strong>${opportunity.scores?.[key] || 0}/10</strong><i><b style="width:${(opportunity.scores?.[key] || 0) * 10}%"></b></i></div>`).join('')}</div><div class="assessment-confidence"><span>Confidence</span><strong class="confidence-${escapeHtml(opportunity.confidence)}">${escapeHtml(capitalize(opportunity.confidence))}</strong><p>Confidence is separate from the Opportunity Score.</p></div></section><div class="detail-two-column"><section class="detail-card"><div class="eyebrow">POTENTIAL RISKS</div><h2>What could weaken this?</h2>${opportunity.risks?.length ? opportunity.risks.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">No specific risks were returned; validate before acting.</p>'}</section><section class="detail-card"><div class="eyebrow">WHAT WOULD DISPROVE THIS?</div><h2>Falsification signals</h2>${opportunity.falsificationSignals?.length ? opportunity.falsificationSignals.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">Define disconfirming evidence before investing attention.</p>'}</section></div><section class="validation-card"><div><div class="eyebrow">HOW TO VALIDATE</div><h2>${escapeHtml(opportunity.validationPlan?.method || 'Research or experiment')}</h2><p>${escapeHtml(opportunity.validationPlan?.plan || 'Create a small, measurable test before building a campaign.')}</p></div><div><div class="eyebrow">RECOMMENDED NEXT STEP</div><h2>${escapeHtml(opportunity.recommendedNextStep || 'Validate the audience tension')}</h2><p>Phase 4 stops here. No campaign is created automatically.</p></div></section>${state.selectedSource ? sourceModal(state.selectedSource, sources) : ''}</div>`;
+  return `<div class="radar-page page-entrance"><div class="detail-back"><button class="text-button" type="button" data-action="back-to-radar">${icon('arrow', 16)} Back to Opportunity Radar</button></div><div class="opportunity-detail-header"><div><div class="eyebrow">OPPORTUNITY · ${escapeHtml(capitalize(opportunity.type))}</div><h1>${escapeHtml(opportunity.title)}</h1><p>${escapeHtml(opportunity.oneLineDescription || '')}</p></div><div class="opportunity-detail-actions"><span class="opportunity-status-tag">${escapeHtml(capitalize(status))}</span><button class="button button-secondary" type="button" data-action="set-opportunity-status" data-status="selected" data-id="${escapeHtml(opportunity.id)}">${icon('check', 15)} Select</button><button class="quiet-button" type="button" data-action="set-opportunity-status" data-status="rejected" data-id="${escapeHtml(opportunity.id)}">Reject</button><button class="button button-primary" type="button" data-action="develop-campaign" data-id="${escapeHtml(opportunity.id)}">${icon('layers', 15)} Develop Campaign</button></div></div>${opportunityReviewBanner(opportunity)}<section class="detail-thesis"><div class="eyebrow">STRATEGIC THESIS · HYPOTHESIS</div><h2>${escapeHtml(opportunity.strategicThesis)}</h2><p>This is a strategic hypothesis to explore, not a prediction of success.</p></section><section class="detail-chain"><div class="eyebrow">WHY THIS OPPORTUNITY EXISTS</div><h2>Follow the evidence chain.</h2><div class="evidence-chain"><div class="chain-step"><span>01</span><div><div class="eyebrow">MARKET SIGNALS</div>${(opportunity.marketSignals || []).length ? opportunity.marketSignals.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">No market signal was mapped.</p>'}</div></div><div class="chain-arrow">↓</div><div class="chain-step"><span>02</span><div><div class="eyebrow">AUDIENCE SIGNALS</div>${(opportunity.audienceSignals || []).length ? opportunity.audienceSignals.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">No audience signal was mapped.</p>'}</div></div><div class="chain-arrow">↓</div><div class="chain-step"><span>03</span><div><div class="eyebrow">BRAND RELEVANCE</div><div class="detail-object"><span class="evidence-badge evidence-${escapeHtml(opportunity.brandFit?.evidenceType || 'unknown')}"><i></i>${escapeHtml(capitalize(opportunity.brandFit?.evidenceType || 'unknown'))}</span><p>${escapeHtml(opportunity.brandFit?.explanation || 'Brand fit remains uncertain.')}</p>${opportunityEvidenceButtons([opportunity.brandFit], sources)}</div></div></div><div class="chain-arrow">↓</div><div class="chain-step"><span>04</span><div><div class="eyebrow">OPPORTUNITY</div><div class="detail-object opportunity-object"><span class="evidence-badge evidence-hypothesis"><i></i>Hypothesis</span><p>${escapeHtml(opportunity.oneLineDescription || opportunity.strategicThesis)}</p></div></div></div></div></section><section class="detail-card competitive-detail"><div class="eyebrow">COMPETITIVE CONTEXT</div><h2>What the category appears to occupy.</h2><p>${escapeHtml(opportunity.competitiveContext?.summary || 'Competitive evidence is limited.')}</p>${opportunityEvidenceButtons([opportunity.competitiveContext], sources)}</section><div class="detail-two-column"><section class="detail-card"><div class="eyebrow">WHY NOW</div><h2>${escapeHtml(capitalize(opportunity.timing?.level || 'unknown'))}</h2><p>${escapeHtml(opportunity.timing?.explanation || 'Timing is unknown from the available evidence.')}</p>${opportunityEvidenceButtons([opportunity.timing], sources)}</section><section class="detail-card"><div class="eyebrow">POTENTIAL WHITESPACE</div><h2>Worth exploring</h2><p>${escapeHtml(opportunity.whitespace?.statement || 'No potential whitespace was supported by the current evidence.')}</p>${opportunityEvidenceButtons([opportunity.whitespace], sources)}</section></div>${opportunity.contradictions?.length ? `<section class="detail-card contradiction-detail"><div class="eyebrow">CONTRADICTIONS TO HOLD</div><h2>Evidence is mixed.</h2>${opportunity.contradictions.map((item) => opportunityEvidenceRow(item, sources)).join('')}</section>` : ''}<section class="assessment-card"><div><div class="eyebrow">MARKETMIND ASSESSMENT</div><h2>${opportunity.scores?.overall || 0}<small>/100</small></h2><p>AI assessment based on available evidence. Not a probability of success.</p></div><div class="score-breakdown">${[['Audience relevance','audienceRelevance'],['Brand fit','brandFit'],['Evidence strength','evidenceStrength'],['Timing','timing'],['Competitive whitespace','competitiveWhitespace'],['Actionability','actionability']].map(([label, key]) => `<div><span>${label}</span><strong>${opportunity.scores?.[key] || 0}/10</strong><i><b style="width:${(opportunity.scores?.[key] || 0) * 10}%"></b></i></div>`).join('')}</div><div class="assessment-confidence"><span>Confidence</span><strong class="confidence-${escapeHtml(opportunity.confidence)}">${escapeHtml(capitalize(opportunity.confidence))}</strong><p>Confidence is separate from the Opportunity Score.</p></div></section><div class="detail-two-column"><section class="detail-card"><div class="eyebrow">POTENTIAL RISKS</div><h2>What could weaken this?</h2>${opportunity.risks?.length ? opportunity.risks.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">No specific risks were returned; validate before acting.</p>'}</section><section class="detail-card"><div class="eyebrow">WHAT WOULD DISPROVE THIS?</div><h2>Falsification signals</h2>${opportunity.falsificationSignals?.length ? opportunity.falsificationSignals.map((item) => opportunityEvidenceRow(item, sources)).join('') : '<p class="muted-copy">Define disconfirming evidence before investing attention.</p>'}</section></div><section class="validation-card"><div><div class="eyebrow">HOW TO VALIDATE</div><h2>${escapeHtml(opportunity.validationPlan?.method || 'Research or experiment')}</h2><p>${escapeHtml(opportunity.validationPlan?.plan || 'Create a small, measurable test before building a campaign.')}</p></div><div><div class="eyebrow">RECOMMENDED NEXT STEP</div><h2>${escapeHtml(opportunity.recommendedNextStep || 'Validate the audience tension')}</h2><p>Phase 4 stops here. No campaign is created automatically.</p></div></section>${state.selectedSource ? sourceModal(state.selectedSource, sources) : ''}</div>`;
 }
 
 function opportunityPage() {
@@ -1095,26 +1125,79 @@ function campaignEditor(campaign) {
 }
 
 function campaignReviewBanner(campaign) {
-  const flags = campaign?.meta?.claimFlags;
-  if (!Array.isArray(flags) || flags.length === 0) return '';
+  const flags = Array.isArray(campaign?.meta?.claimFlags) ? campaign.meta.claimFlags : [];
+  const adjustments = Array.isArray(campaign?.meta?.labelAdjustments) ? campaign.meta.labelAdjustments : [];
+  if (!flags.length && !adjustments.length) return '';
+  // Self-contained helpers: render tests extract this function alone.
+  const fieldNames = {
+    researchSummary: 'Research summary', strategicProblem: 'Strategic problem', audienceInsight: 'Audience insight',
+    campaignThesis: 'Campaign thesis', currentPerception: 'Current perception', desiredPerception: 'Desired perception',
+    brandRole: 'Brand role', coreMessage: 'Core message', creativePrinciple: 'Creative principle',
+    supportingMessages: 'Supporting message', contentPillars: 'Content pillar', kpis: 'KPI', experiments: 'Experiment',
+    risks: 'Risk', killCriteria: 'Kill criterion', segments: 'Segment', observedBehaviors: 'Observed behavior',
+    motivations: 'Motivation', pains: 'Pain', desires: 'Desire', tensions: 'Tension', barriers: 'Barrier',
+    objections: 'Objection', triggers: 'Trigger', identityDrivers: 'Identity driver', contentBehaviors: 'Content behavior',
+    decisionFactors: 'Decision factor', momentsThatMatter: 'Moment that matters', hypotheses: 'Hypothesis', uncertainties: 'Open question',
+    timing: 'Timing', strategicThesis: 'Strategic thesis', oneLineDescription: 'Summary line', opportunities: 'Opportunity',
+  };
+  const camelLabel = (key) => String(key || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+  const fieldLabel = (field) => {
+    const raw = String(field || '');
+    if (!raw) return '';
+    if (!raw.includes('[') && !raw.includes('.')) return fieldNames[raw] || camelLabel(raw);
+    const listMatch = raw.match(/^(\w+)\[(\d+)\](?:\.(\w+))?$/);
+    if (listMatch) {
+      const base = fieldNames[listMatch[1]] || camelLabel(listMatch[1]).replace(/s$/, '');
+      const label = `${base} ${Number(listMatch[2]) + 1}`;
+      return listMatch[3] ? `${label} · ${camelLabel(listMatch[3])}` : label;
+    }
+    const dotMatch = raw.match(/^(\w+)\.(\w+)$/);
+    if (dotMatch) return `${camelLabel(dotMatch[1])} · ${camelLabel(dotMatch[2])}`;
+    return raw;
+  };
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const readableDate = (iso) => {
+    const date = new Date(iso || '');
+    if (Number.isNaN(date.getTime())) return iso || 'unknown';
+    return `${date.getUTCDate()} ${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+  };
+  const adjustmentReasonLabels = {
+    'hedged-language': 'hedged language',
+    'inferential-framing': 'inferential framing',
+    'qualifier-not-in-sources': 'qualifier absent from cited sources',
+    'persuasive-copy': 'persuasive copy, not an observation',
+    'behavior-inferred-from-offer': "behavior inferred from an offer's existence",
+    'awareness-inferred-from-content': 'awareness inferred from content existence',
+    'past-date-framed-as-upcoming': 'past-dated material framed as upcoming',
+  };
   const messages = flags.map((flag) => {
+    const label = fieldLabel(flag.field);
+    const where = label ? ` (${label})` : '';
     if (flag.reason === 'past-date-framed-as-upcoming' && flag.datedMaterial) {
-      return `Review recommended: "${flag.datedMaterial}" appears in the past relative to this strategy's generation date (${flag.checkedAt || 'unknown'}), but a claim frames it as upcoming.`;
+      return `Review recommended${where}: "${flag.datedMaterial}" appears in the past relative to this output's generation date (${readableDate(flag.checkedAt)}), but a claim frames it as upcoming.`;
+    }
+    if (flag.reason === 'company-stat-generalized' && flag.detail) {
+      return `Review recommended${where}: ${flag.detail}.`;
     }
     if (flag.reason === 'absolute-language' && flag.detail) {
-      return `Review recommended: "${flag.detail}" is absolute language that no cited excerpt supports.`;
+      return `Review recommended${where}: "${flag.detail}" is absolute language that no cited excerpt supports.`;
     }
     if (flag.reason === 'offer-market-unverified' && flag.detail) {
-      return `Review recommended: this claim relies on an offer that no cited source verifies for the target market (${flag.detail}).`;
+      return `Review recommended${where}: this claim relies on an offer that no cited source verifies for the target market (${flag.detail}).`;
     }
     if (flag.reason === 'offer-premise-unsourced' && flag.detail) {
-      return `Review recommended: this claim asserts an existing offer that no cited source supports (${flag.detail}).`;
+      return `Review recommended${where}: this claim asserts an existing offer that no cited source supports (${flag.detail}).`;
     }
     if (flag.reason === 'source-region-mismatch' && flag.detail) {
-      return `Review recommended: a cited source is region-specific (${flag.detail}).`;
+      return `Review recommended${where}: a cited source is region-specific (${flag.detail}).`;
     }
-    return `Review recommended: ${flag.reason || 'claim consistency flag'}.`;
+    return `Review recommended${where}: ${flag.reason || 'claim consistency flag'}.`;
   });
+  if (adjustments.length) {
+    const shown = adjustments.slice(0, 4).map((adjustment) => `${fieldLabel(adjustment.field)} (${adjustmentReasonLabels[adjustment.reason] || adjustment.reason})`);
+    const more = adjustments.length > shown.length ? `, and ${adjustments.length - shown.length} more` : '';
+    messages.push(`The consistency check relabeled ${adjustments.length} claim${adjustments.length === 1 ? '' : 's'} toward caution: ${shown.join('; ')}${more}.`);
+  }
   return `<div class="campaign-limited-banner">${icon('clock', 15)} <span>${messages.map(escapeHtml).join(' ')} This check is limited and does not verify other claims.</span></div>`;
 }
 
@@ -1336,7 +1419,7 @@ async function startResearch() {
     persistStrategy(state.strategy);
     state.researchRun = null;
     render();
-    showToast(error.message || 'Market research failed.', 'error');
+    notifyStageError(error, 'Market research failed.');
   } finally {
     finishRequest('research', requestController);
   }
@@ -1435,7 +1518,7 @@ async function startAudienceAnalysis() {
     if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     state.audienceRun = null;
     render();
-    showToast(error.message || 'Audience analysis failed.', 'error');
+    notifyStageError(error, 'Audience analysis failed.');
   } finally {
     finishRequest('audience', requestController);
   }
@@ -1508,7 +1591,7 @@ async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
     if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     state.opportunityRun = null;
     render();
-    showToast(error.message || 'Opportunity Radar failed.', 'error');
+    notifyStageError(error, 'Opportunity Radar failed.');
   } finally {
     finishRequest('radar', requestController);
   }
@@ -1571,7 +1654,7 @@ async function startCampaignStrategy(section = 'all') {
     if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     state.campaignRun = null;
     render();
-    showToast(error.message || 'Campaign strategy failed.', 'error');
+    notifyStageError(error, 'Campaign strategy failed.');
   } finally {
     finishRequest('campaigns', requestController);
   }
@@ -1823,6 +1906,12 @@ function attachGlobalEvents() {
       render();
     }
   }));
+  document.querySelectorAll('[data-action="close-access-request"]').forEach((element) => element.addEventListener('click', (event) => {
+    if (element.classList.contains('feedback-overlay') && event.target !== element) return;
+    state.accessRequest = { ...state.accessRequest, open: false, sending: false };
+    render();
+  }));
+  document.querySelector('[data-action="submit-access-request"]')?.addEventListener('click', () => { submitAccessRequest(); });
   document.querySelector('#beta-feedback-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const account = storage.capture();
@@ -1999,6 +2088,44 @@ function attachWorkspaceEvents() {
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? 'GOOD MORNING' : hour < 18 ? 'GOOD AFTERNOON' : 'GOOD EVENING';
+}
+
+async function submitAccessRequest() {
+  const account = storage.capture();
+  state.accessRequest = { ...state.accessRequest, sending: true, error: null };
+  render();
+  try {
+    if (!state.cloud.repository) throw new Error('Your workspace is still syncing. Try again in a moment.');
+    await state.cloud.repository.requestBetaAccess(state.auth.user?.email || '');
+    // Durable record saved; now log the notification trail for the
+    // administrator. A logging failure must not undo a saved request, and
+    // the confirmation copy only claims the durable queue, so it stays true.
+    try {
+      await authenticatedFetch('/api/access-request', { method: 'POST' });
+    } catch (logError) {
+      console.warn('access-request notification log failed', logError);
+    }
+    if (!storage.isCurrent(account)) return;
+    state.accessRequest = { open: true, sending: false, sent: true, error: null };
+    render();
+  } catch (error) {
+    if (!storage.isCurrent(account)) return;
+    state.accessRequest = { ...state.accessRequest, sending: false, error: isAbortError(error) ? 'The request was cancelled. Try again when ready.' : error.message || 'The request could not be saved. Try again shortly.' };
+    render();
+  }
+}
+
+function isAccessDeniedError(message) {
+  return String(message || '').toLowerCase().includes('invite-only pilot');
+}
+
+function notifyStageError(error, fallback) {
+  if (isAccessDeniedError(error?.message)) {
+    state.accessRequest = { open: true, sending: false, sent: false, error: null };
+    render();
+    return;
+  }
+  showToast(error?.message || fallback, 'error');
 }
 
 function showToast(message, type = 'info') {

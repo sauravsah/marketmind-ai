@@ -31,6 +31,7 @@ export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behav
       'Never stereotype people by age, geography, occupation, identity, or life stage.',
       'Do not present a plausible marketing convention as an observation.',
       ...EVIDENCE_DISCIPLINE_RULES,
+      'Observed behavior means a source shows someone doing it; an offer, article, or product existing is not observed behavior - label it inferred.',
       'Every observed item must cite one or more sourceIds from the packet.',
       'Inferred items must be framed as interpretation from cited observations.',
       'Hypotheses are testable possibilities and must remain hypotheses.',

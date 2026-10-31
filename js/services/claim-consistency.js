@@ -26,6 +26,24 @@ const ABSOLUTE_PATTERN = /\b(risk[- ]free|(?:no|zero|without) risk|eliminates? (
 // cited sources that mention an offer place it in the strategy's target market,
 // the market fit of that premise is unverified - flag only, never demote or
 // rewrite. A source explicitly describing a global offer suppresses the flag.
+// Consumer-facing persuasion ("Get the shoes you need...") is expression, not
+// observation: an observed claim reports evidence and never addresses the
+// reader. Second-person or imperative-lead copy cannot be observed.
+const PERSUASIVE_COPY_PATTERN = /\b(?:you|your|you'll|you're)\b/i;
+const IMPERATIVE_LEAD_PATTERN = /^\s*(?:get|grab|unlock|discover|join|step into|own|elevate|start|feel|look|meet|train|move|say goodbye|focus on|make every)\b/i;
+// Behavior asserted from an offer's existence: "Uses the app to claim a 10%
+// discount" is observed only when a cited excerpt shows the behavior itself
+// (redemption, usage, a first-person account) - the offer existing is not the
+// audience acting on it.
+const OFFER_USAGE_PATTERN = /\b(?:use[sd]?|claim(?:s|ed|ing)?|redeem(?:s|ed|ing)?|signs? up|signed up|appl(?:y|ies|ied) for|takes? advantage of|(?:look(?:s|ing)?|seek(?:s|ing)?|search(?:es|ing)?|hunt(?:s|ing)?) for)\b/i;
+const USAGE_EVIDENCE_PATTERN = /\b(?:redeemed|(?:shoppers|customers|users|members)\s+(?:have|who)\s+(?:saved|claimed|redeemed|used)|\bi(?:'ve| have)?\s+(?:used|got|claimed|redeemed|saved))\b/i;
+// Awareness asserted from content existence: "Consumers aware of sneaker
+// culture" is observed only when a cited excerpt itself reports awareness
+// (a survey, recall data) - the topic existing in sources is not the audience
+// knowing it.
+const AWARENESS_CLAIM_PATTERN = /\b(?:consumers?|shoppers?|users?|buyers?|customers?|audiences?|people|they)\s+(?:are\s+|were\s+)?aware of\b/i;
+const AWARENESS_EVIDENCE_PATTERN = /\b(?:aware|familiar with|recogni[sz]e[sd]?|heard of|recall)\b/i;
+
 const OFFER_PATTERN = /\b\d{1,2}\s?%\s*(?:off|discount)\b|\bsave\s?\d{1,2}\s?%|\bsavings\b|\bdiscounts?\b|\bpromo(?:tion|tional|tions)?\b|\bcoupons?\b|\bvouchers?\b|\bfree (?:shipping|delivery|returns?|exchanges?|trials?)\b|\boffer\b|\bdeals?\b/i;
 const GLOBAL_MARKET_PATTERN = /\b(global(?:ly)?|worldwide|international(?:ly)?|all (?:markets|countries|regions))\b/i;
 // Text-bearing copy/instruction fields checked for existence-framed offer
@@ -102,7 +120,10 @@ function sourceMentionsMarket(source, marketIndex) {
   const text = normalizeForMatch(`${source?.title || ''} ${source?.snippet || ''}`).toLowerCase();
   return market.terms.some((term) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
 }
-const UPCOMING_PATTERN = /\b(upcoming|coming soon|will (?:launch|roll out|release|introduce|debut)|soon|next (?:month|quarter|year)|later this year)\b/i;
+// Temporal framing vocabulary: "upcoming" plus equivalent future-window framings
+// ("near-term", "activation window"). The suppression rules below still apply:
+// any future date in the claim or its excerpts clears the flag.
+const UPCOMING_PATTERN = /\b(upcoming|coming soon|will (?:launch|roll out|release|introduce|debut)|soon|next (?:month|quarter|year)|later this year|near[- ]term|imminent|approaching|on the horizon|around the corner|activation window)\b/i;
 // Strong population/geography qualifiers an observed claim may not invent:
 // if the claim asserts one of these and no cited excerpt mentions it, the
 // claim is at best inferred. Fixed list by design - a floor, not entailment.
@@ -115,6 +136,7 @@ const QUALIFIER_PATTERNS = [
   { key: 'urban', pattern: /\burban\b/i },
   { key: 'india', pattern: /\bindia(?:n)?\b/i },
   { key: 'gym-goer', pattern: /\bgym[- ]goers?\b/i },
+  { key: 'gym-member', pattern: /\bgym[- ]members?\b/i },
   { key: 'runner', pattern: /\brunners?\b/i },
   { key: 'student', pattern: /\bstudents?\b/i },
   { key: 'women', pattern: /\bwomen\b/i },
@@ -194,17 +216,34 @@ function reviewClaim(field, claim, sources, now, adjustments, flags, context = {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'qualifier-not-in-sources', detail: missing.join(', ') });
       claim.evidenceType = 'inferred';
     }
+    if (claim.evidenceType === 'observed' && (PERSUASIVE_COPY_PATTERN.test(statement) || IMPERATIVE_LEAD_PATTERN.test(statement))) {
+      adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'persuasive-copy', detail: 'second-person or imperative copy' });
+      claim.evidenceType = 'inferred';
+    }
+    if (claim.evidenceType === 'observed' && OFFER_PATTERN.test(statement) && OFFER_USAGE_PATTERN.test(statement) && !USAGE_EVIDENCE_PATTERN.test(excerpts)) {
+      adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'behavior-inferred-from-offer', detail: 'offer existence is not observed redemption' });
+      claim.evidenceType = 'inferred';
+    }
+    if (claim.evidenceType === 'observed' && AWARENESS_CLAIM_PATTERN.test(statement) && !AWARENESS_EVIDENCE_PATTERN.test(excerpts)) {
+      adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'awareness-inferred-from-content', detail: 'content existence is not observed awareness' });
+      claim.evidenceType = 'inferred';
+    }
   }
-  if (UPCOMING_PATTERN.test(statement)) {
-    // Flag only when the dated material is unambiguously in the past: an old
-    // source can legitimately announce a future event, so any future date in
-    // the same claim or its excerpts suppresses the flag. Source publication
-    // dates are never used - a past publication date is not a past event date.
-    const combined = `${statement} ${excerpts}`;
-    const dated = futureDatesIn(combined, now) ? [] : [...new Set([...pastDatesIn(statement, now), ...pastDatesIn(excerpts, now)])];
+  if (UPCOMING_PATTERN.test(statement) && !futureDatesIn(statement, now)) {
+    // A past date inside the claim's own words makes the upcoming framing
+    // self-contradictory; only a future date in the same statement suppresses
+    // that. When the past date comes from cited excerpts, a future date
+    // suppresses only if it shares the excerpt SENTENCE carrying the past
+    // date ("reported in 2024, launches in 2027") - an unrelated future
+    // mention elsewhere must not hide a past event framed as upcoming, and is
+    // recorded as context instead. Publication dates are never used - a past
+    // publication date is not a past event date.
+    const excerptPast = [...new Set(sentenceList(excerpts).filter((sentence) => !futureDatesIn(sentence, now)).flatMap((sentence) => pastDatesIn(sentence, now)))];
+    const dated = [...new Set([...pastDatesIn(statement, now), ...excerptPast])];
     if (dated.length) {
-      flags.push({ field, reason: 'past-date-framed-as-upcoming', detail: dated.join(', '), datedMaterial: dated.join(', '), checkedAt: now.toISOString() });
-      if (claim.confidence !== 'low') {
+      const detail = futureDatesIn(excerpts, now) ? `${dated.join(', ')} (cited excerpts also mention future dates)` : dated.join(', ');
+      flags.push({ field, reason: 'past-date-framed-as-upcoming', detail, datedMaterial: dated.join(', '), checkedAt: now.toISOString() });
+      if (typeof claim.confidence === 'string' && claim.confidence !== 'low') {
         adjustments.push({ field, from: claim.confidence, to: 'low', reason: 'past-date-framed-as-upcoming' });
         claim.confidence = 'low';
       }
@@ -267,6 +306,113 @@ function reviewClaim(field, claim, sources, now, adjustments, flags, context = {
       }
     }
   }
+}
+
+// Attribution floor: a figure presented under a market-level subject ("the
+// market shows strong growth investment (Rs 100 cr...)") must keep its owner.
+// When the figure's source sentence names a specific organization the summary
+// sentence drops, flag - never rewrite. Flag-only: org detection is a floor,
+// not entailment, so false positives cost a review note and nothing more.
+const MARKET_LEVEL_SUBJECT = /\b(?:the\s+)?(?:market|industry|sector|category)\b/i;
+const FIGURE_TOKEN = /\d+(?:\.\d+)?\s?%|(?:rs\.?|₹|inr|usd|\$|€|£)\s?\d[\d,.]*\s*(?:crore|cr|lakh|million|billion|mn|bn)?/gi;
+const ORG_TOKEN = /\b[A-Z][A-Za-z&]+(?:\s+[A-Z][A-Za-z&]+){0,2}\b/g;
+const ORG_STOPWORDS = new Set(['The', 'A', 'An', 'In', 'For', 'How', 'What', 'Why', 'Rs', 'CEO', 'FY']);
+
+function sentenceList(text) {
+  return String(text || '').match(/[^.!?]+[.!?]+/g) || [String(text || '')];
+}
+
+function figureMatchesSentence(figure, sentence) {
+  const digits = figure.replace(/[^\d.]/g, '').replace(/\.$/, '');
+  if (!digits) return false;
+  if (figure.includes('%')) return sentence.includes(`${digits}%`) || sentence.includes(`${digits} %`);
+  return sentence.replace(/,/g, '').includes(digits) && /(?:crore|\bcr\b|lakh|million|billion|\bmn\b|\bbn\b)/i.test(sentence);
+}
+
+// A figure under a market-level subject must keep its owner. The check reads
+// only the source SENTENCE carrying the figure: if that sentence names an
+// organization the summary sentence drops, flag - never rewrite. Flag-only:
+// org detection is a floor, not entailment, so a false positive costs a
+// review note and nothing more.
+function reviewAttribution(field, text, sources, now, flags) {
+  for (const sentence of sentenceList(text)) {
+    if (!MARKET_LEVEL_SUBJECT.test(sentence)) continue;
+    const figures = sentence.match(FIGURE_TOKEN);
+    if (!figures || !figures.length) continue;
+    let flagged = false;
+    for (const figure of figures) {
+      if (flagged) break;
+      for (const source of sources || []) {
+        if (flagged) break;
+        // Title and snippet are separate candidate sentences: a headline can
+        // carry the stat (aggregator lists), but joining them would glue a
+        // junk tag-page title onto the stat sentence and fake org tokens.
+        const candidates = [...sentenceList(source?.title), ...sentenceList(source?.snippet)];
+        const ownerSentence = candidates.find((candidate) => figureMatchesSentence(figure, candidate));
+        if (!ownerSentence) continue;
+        const orgs = (ownerSentence.match(ORG_TOKEN) || [])
+          .filter((token) => !ORG_STOPWORDS.has(token) && !/^FY\d/.test(token))
+          .filter((token) => !sentence.toLowerCase().includes(token.toLowerCase()));
+        if (orgs.length) {
+          flags.push({ field, reason: 'company-stat-generalized', detail: `figure "${figure.trim()}" reads as market-level; the source attributes it to ${orgs[0]}`, checkedAt: now.toISOString() });
+          flagged = true;
+        }
+      }
+    }
+  }
+}
+
+// Applies the consistency floor to a generated opportunity radar. Timing is a
+// labeled sub-claim (evidenceType + explanation) so demotions write back;
+// thesis and one-liner are flag-only copy. Records in radar.meta.
+export function applyOpportunityConsistency(radar, sources = [], now = new Date(), context = {}) {
+  if (!radar || typeof radar !== 'object') return radar;
+  const adjustments = [];
+  const flags = [];
+  (Array.isArray(radar.opportunities) ? radar.opportunities : []).forEach((item, index) => {
+    if (!item || typeof item !== 'object') return;
+    if (item.timing && typeof item.timing === 'object') {
+      const timingClaim = { statement: item.timing.explanation, evidenceType: item.timing.evidenceType, sourceIds: item.timing.sourceIds, confidence: item.timing.level };
+      reviewClaim(`opportunities[${index}].timing`, timingClaim, sources, now, adjustments, flags, context);
+      if (timingClaim.evidenceType !== item.timing.evidenceType) item.timing.evidenceType = timingClaim.evidenceType;
+      if (timingClaim.confidence !== item.timing.level) {
+        // reviewClaim uses generic confidence vocabulary; timing levels are strong/moderate/weak/unknown.
+        const mapped = timingClaim.confidence === 'low' ? 'weak' : timingClaim.confidence;
+        if (['strong', 'moderate', 'weak', 'unknown'].includes(mapped)) item.timing.level = mapped;
+      }
+    }
+    reviewClaim(`opportunities[${index}].strategicThesis`, { statement: item.strategicThesis, sourceIds: item.sourceIds }, sources, now, adjustments, flags, context);
+    reviewClaim(`opportunities[${index}].oneLineDescription`, { statement: item.oneLineDescription, sourceIds: item.sourceIds }, sources, now, adjustments, flags, context);
+    const cited = (sources || []).filter((source) => (item.sourceIds || []).includes(source?.id));
+    reviewAttribution(`opportunities[${index}].strategicThesis`, item.strategicThesis, cited, now, flags);
+  });
+  radar.meta = { ...(radar.meta || {}) };
+  delete radar.meta.labelAdjustments;
+  delete radar.meta.claimFlags;
+  delete radar.meta.consistencyCheckedAt;
+  if (adjustments.length) radar.meta.labelAdjustments = adjustments;
+  if (flags.length) radar.meta.claimFlags = flags;
+  if (adjustments.length || flags.length) radar.meta.consistencyCheckedAt = now.toISOString();
+  return radar;
+}
+
+// Applies the same floor to generated research. The summary is flag-only copy
+// checked against the full source set (its sentences carry no citations of
+// their own); signals are dated facts and stay untouched.
+export function applyResearchConsistency(research, sources = [], now = new Date(), context = {}) {
+  if (!research || typeof research !== 'object') return research;
+  const adjustments = [];
+  const flags = [];
+  if (typeof research.researchSummary === 'string' && research.researchSummary.trim()) {
+    reviewClaim('researchSummary', { statement: research.researchSummary, sourceIds: (sources || []).map((source) => source.id) }, sources, now, adjustments, flags, context);
+    reviewAttribution('researchSummary', research.researchSummary, sources, now, flags);
+  }
+  research.meta = { ...(research.meta || {}) };
+  delete research.meta.claimFlags;
+  delete research.meta.consistencyCheckedAt;
+  if (flags.length) research.meta.claimFlags = flags;
+  if (flags.length) research.meta.consistencyCheckedAt = now.toISOString();
+  return research;
 }
 
 const CLAIM_FIELDS = ['strategicProblem', 'audienceInsight', 'campaignThesis', 'currentPerception', 'desiredPerception', 'brandRole', 'coreMessage', 'creativePrinciple'];

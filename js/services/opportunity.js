@@ -1,5 +1,6 @@
 import { synthesizeOpportunities } from './ai.js';
 import { getAudienceReviewSummary, getRadarEligibleAudienceItems } from '../audience-review.js';
+import { applyOpportunityConsistency } from './claim-consistency.js';
 import {
   OPPORTUNITY_CONFIDENCE,
   OPPORTUNITY_SCORE_WEIGHTS,
@@ -354,6 +355,7 @@ export async function identifyOpportunities(context, configs = {}, options = {})
   radar.researchTimestamp = prepared.researchTimestamp;
   radar.audienceAnalysisTimestamp = prepared.audienceAnalysisTimestamp;
   radar.meta = { ...radar.meta, aiStatus: synthesis.status, stale, variation, assessmentLabel: 'AI assessment based on available evidence.', providerCalls: callStats, contradictionsConsidered: prepared.contradictions };
+  applyOpportunityConsistency(radar, prepared.sources, now, { market: context?.strategy?.market });
   return radar;
 }
 

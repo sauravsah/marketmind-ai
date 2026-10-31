@@ -1706,3 +1706,73 @@ html { color-scheme: dark; }
 .feedback-dialog textarea { min-height: 120px; resize: vertical; }
 .feedback-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
 @media (max-width: 600px) { .feedback-dialog { padding: 26px 20px 20px; } .feedback-dialog h2 { font-size: 29px; } .feedback-dialog-actions { flex-direction: column-reverse; } .feedback-dialog-actions .button { width: 100%; justify-content: center; } }
+
+/* Light-theme radar corrections: opportunity cards, radar status cards, the
+   radar compare block and the detail page's var(--surface) cards turn white in
+   the light theme, so the dark palette's pale text colors need dark-on-light
+   values. Panels that keep their dark surface (radar-summary, opportunity
+   thesis box, assessment card, validation card) are untouched. */
+:root[data-theme="light"] .radar-status-card span { color: var(--text-secondary); }
+:root[data-theme="light"] .radar-status-card strong { color: var(--text-primary); }
+:root[data-theme="light"] .radar-status-card small { color: var(--muted); }
+:root[data-theme="light"] .opportunity-card h3 { color: var(--text-primary); }
+:root[data-theme="light"] .opportunity-one-line { color: var(--text-secondary); }
+:root[data-theme="light"] .opportunity-type { color: var(--accent-text); }
+:root[data-theme="light"] .opportunity-status-tag { color: var(--text-secondary); border-color: var(--border); }
+:root[data-theme="light"] .opportunity-score strong { color: var(--accent-text); }
+:root[data-theme="light"] .opportunity-score strong small { color: var(--muted); }
+:root[data-theme="light"] .opportunity-score span,
+:root[data-theme="light"] .opportunity-score em { color: var(--text-secondary); }
+:root[data-theme="light"] .opportunity-stat-grid span { color: var(--text-secondary); }
+:root[data-theme="light"] .opportunity-stat-grid strong { color: var(--text-primary); }
+:root[data-theme="light"] .opportunity-stat-grid strong.confidence-high { color: var(--accent-text); }
+:root[data-theme="light"] .opportunity-stat-grid strong.confidence-medium,
+:root[data-theme="light"] .opportunity-card .confidence-medium { color: #8a6420; }
+:root[data-theme="light"] .opportunity-stat-grid strong.confidence-low,
+:root[data-theme="light"] .opportunity-card .confidence-low { color: #5f6559; }
+:root[data-theme="light"] .opportunity-card .confidence-high { color: var(--accent-text); }
+:root[data-theme="light"] .opportunity-card-reasoning p { color: var(--text-secondary); }
+:root[data-theme="light"] .opportunity-card-reasoning span { color: var(--accent-text); }
+:root[data-theme="light"] .opportunity-card-reasoning div + div span { color: #8a6420; }
+:root[data-theme="light"] .opportunity-detail-header h1 { color: var(--text-primary); }
+:root[data-theme="light"] .opportunity-detail-header p { color: var(--text-secondary); }
+:root[data-theme="light"] .detail-thesis h2 { color: var(--text-primary); }
+:root[data-theme="light"] .detail-thesis p { color: var(--text-secondary); }
+:root[data-theme="light"] .detail-card h2 { color: var(--text-primary); }
+:root[data-theme="light"] .detail-card > p { color: var(--text-secondary); }
+:root[data-theme="light"] .opportunity-evidence-row p { color: var(--text-secondary); }
+:root[data-theme="light"] .opportunity-evidence-row small { color: var(--muted); }
+:root[data-theme="light"] .chain-step > span { color: var(--accent-text); }
+:root[data-theme="light"] .compare-header > strong { color: var(--text-primary); }
+:root[data-theme="light"] .compare-row > span,
+:root[data-theme="light"] .compare-row > div { color: var(--text-secondary); }
+:root[data-theme="light"] .compare-row > span:first-child { color: var(--muted); }
+:root[data-theme="light"] .compare-row strong { color: var(--accent-text); }
+:root[data-theme="light"] .radar-blocked-copy strong { color: #8a6420; }
+:root[data-theme="light"] .radar-blocked-copy p,
+:root[data-theme="light"] .radar-limited-copy p { color: var(--text-secondary); }
+:root[data-theme="light"] .radar-page .opportunity-evidence-buttons button,
+:root[data-theme="light"] .opportunity-card .source-domain { color: var(--accent-text); }
+/* detail-object keeps its dark surface in both themes: keep light-on-dark text
+   and the bright accent for its source buttons even in the light theme. */
+:root[data-theme="light"] .detail-object p { color: #c9cfc2; }
+:root[data-theme="light"] .detail-object .opportunity-evidence-buttons button { color: var(--accent); }
+/* Research snapshot + theme cards turn white in the light theme: swap their
+   dark-palette text for readable light-theme values. Dark theme untouched. */
+:root[data-theme="light"] .snapshot-lead h2 em,
+:root[data-theme="light"] .snapshot-metric strong { color: var(--accent-text); }
+:root[data-theme="light"] .snapshot-lead p,
+:root[data-theme="light"] .snapshot-metric span,
+:root[data-theme="light"] .theme-card p { color: var(--muted); }
+/* Feedback + access-request dialogs keep their dark panel in both themes, so
+   their text must keep dark-theme (light-on-dark) values in the light theme.
+   This also fixes the pre-existing beta feedback dialog, which had the same
+   dark-on-dark heading in the light theme. */
+:root[data-theme="light"] .feedback-dialog { color: #edf2ea; }
+:root[data-theme="light"] .feedback-dialog h2 { color: #edf2ea; }
+:root[data-theme="light"] .feedback-dialog p,
+:root[data-theme="light"] .feedback-dialog label,
+:root[data-theme="light"] .feedback-dialog .modal-close { color: #a6b0a7; }
+:root[data-theme="light"] .feedback-dialog select,
+:root[data-theme="light"] .feedback-dialog textarea { color: #edf2ea; }
+:root[data-theme="light"] .feedback-dialog .eyebrow { color: var(--accent); }

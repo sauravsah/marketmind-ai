@@ -22,13 +22,16 @@ const stages = {
 };
 
 test('evidence discipline rules are short enough for bounded prompts', () => {
-  assert.equal(EVIDENCE_DISCIPLINE_RULES.length, 4);
+  assert.equal(EVIDENCE_DISCIPLINE_RULES.length, 6);
   for (const rule of EVIDENCE_DISCIPLINE_RULES) {
     assert.ok(rule.length <= 130, `rule too long (${rule.length} chars): ${rule}`);
     assert.ok(!/https?:/i.test(rule), 'rules must not embed URLs');
   }
   const joinedLength = EVIDENCE_DISCIPLINE_RULES.reduce((total, rule) => total + rule.length, 0) + EVIDENCE_DISCIPLINE_RULES.length - 1;
-  assert.ok(joinedLength <= 400, `rules add ${joinedLength} chars to every stage system prompt; ceiling is 400 to stay inside prompt budgets`);
+  // Ceiling raised 400 -> 650 on 2026-10-31 for two audit-driven rules
+  // (temporal grounding, statistic attribution); prompt-budget.test.mjs
+  // remains the hard wall per stage.
+  assert.ok(joinedLength <= 650, `rules add ${joinedLength} chars to every stage system prompt; ceiling is 650 to stay inside prompt budgets`);
 });
 
 test('every synthesis stage prompt carries all evidence discipline rules', () => {

@@ -6,4 +6,6 @@ export const EVIDENCE_DISCIPLINE_RULES = [
   'Absence of mention is not evidence of absence; no market-wide or product-line gap from one source.',
   'Cite only sources on the claim\'s subject; else drop the sourceId and lower evidenceType.',
   'No specifics excerpts lack (prices, demographics, brand strength); silent claims stay general.',
+  'Timing words follow dates: an event dated before today is past, never upcoming or near-term.',
+  'A statistic keeps its owner: name the company it belongs to or drop it; never generalize one company\'s figure to market level.',
 ];

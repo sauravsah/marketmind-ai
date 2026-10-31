@@ -119,6 +119,17 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
     return workspaceFromSnapshot(snapshot);
   }
 
+  async function requestBetaAccess(email) {
+    assertCurrent();
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) throw new Error('Your account email is not available yet. Try again in a moment.');
+    // Self-service record on the user's own document. This never grants
+    // access: the server-side allowlist remains the only authority, and the
+    // administrator reviews requests from the Firebase console / Vercel logs.
+    await api.setDoc(workspaceRef(), { accessRequest: { email: normalized, status: 'pending', requestedAt: new Date().toISOString() } }, { merge: true });
+    return { email: normalized, status: 'pending' };
+  }
+
   async function saveWorkspace(workspace) {
     assertCurrent();
     const payload = serializeWorkspaceDocument(workspace, userId);
@@ -164,5 +175,5 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
     return { summary, workspace: savedWorkspace, strategies: [...remoteStrategies, ...imported], imported };
   }
 
-  return { getWorkspace, saveWorkspace, getStrategies, saveStrategy, migrateLocalData, workspaceId };
+  return { getWorkspace, saveWorkspace, requestBetaAccess, getStrategies, saveStrategy, migrateLocalData, workspaceId };
 }

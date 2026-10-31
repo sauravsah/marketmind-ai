@@ -231,3 +231,28 @@ test('campaign ready banner only claims readiness when every section has content
   assert.match(html, /Coming in Phase 6/);
   assert.doesNotMatch(html, /data-action="creative-coming"/);
 });
+
+test('campaignReviewBanner surfaces label adjustments and company-stat flags with field tags', () => {
+  const escapeHtml = new Function(`${extractFunction('escapeHtml')}\nreturn escapeHtml;`)();
+  const icon = () => '';
+  const campaignReviewBanner = new Function(
+    'escapeHtml',
+    'icon',
+    `${extractFunction('campaignReviewBanner')}\nreturn campaignReviewBanner;`,
+  )(escapeHtml, icon);
+
+  // Adjustments alone (no flags) must still render - a silent demotion list is a visible change.
+  const adjustmentsOnly = campaignReviewBanner({ meta: { labelAdjustments: [
+    { field: 'supportingMessages[1]', from: 'observed', to: 'inferred', reason: 'persuasive-copy' },
+  ] } });
+  assert.match(adjustmentsOnly, /relabeled 1 claim toward caution/);
+  assert.match(adjustmentsOnly, /Supporting message 2 \(persuasive copy, not an observation\)/);
+
+  const flagged = campaignReviewBanner({ meta: { claimFlags: [
+    { field: 'researchSummary', reason: 'company-stat-generalized', detail: 'figure "Rs 100 cr" reads as market-level; the source attributes it to Asian Footwears', checkedAt: '2026-10-31T00:00:00.000Z' },
+  ] } });
+  assert.match(flagged, /\(Research summary\)/);
+  assert.match(flagged, /reads as market-level; the source attributes it to Asian Footwears/);
+
+  assert.equal(campaignReviewBanner({ meta: { claimFlags: [], labelAdjustments: [] } }), '');
+});

@@ -1,4 +1,5 @@
 import { synthesizeResearch } from './ai.js';
+import { applyResearchConsistency } from './claim-consistency.js';
 import { createEmptyResearch } from '../models.js';
 
 const DEPTH_LIMITS = {
@@ -298,6 +299,7 @@ export async function researchMarket(context, configs = {}, options = {}) {
   const output = validateResearchOutput(synthesis.candidate, sources);
   const usedSourceIds = new Set(allSignals(output).flatMap((signal) => signal.sourceIds));
   output.meta = { ...output.meta, researchedAt: new Date().toISOString(), depth, queryCount: queries.length, sourcesReviewed: sources.length, sourcesUsed: usedSourceIds.size, providerStatus: 'verified', aiStatus: synthesis.status, providerCalls: callStats, searchCalls, warnings: [], failures: searchResult.failures };
+  applyResearchConsistency(output, sources, options.now instanceof Date ? options.now : new Date(), { market: context?.strategy?.market });
   output.sources = sources;
   onStage({ id: 'complete', label: 'Research ready', signals: allSignals(output).length });
   return output;

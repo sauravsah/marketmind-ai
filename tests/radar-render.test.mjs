@@ -137,7 +137,7 @@ test('real applyClaimConsistency output renders through the real campaignReviewB
 
   assert.match(html, /Review recommended/);
   assert.match(html, /February 2026/);
-  assert.match(html, /2026-10-30T05:00:00\.000Z/);
+  assert.match(html, /30 Oct 2026/);
   assert.match(html, /does not verify other claims/);
   assert.match(html, /campaign-limited-banner/);
   // The dynamic fields reach the HTML only through escapeHtml.

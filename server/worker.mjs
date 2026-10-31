@@ -205,12 +205,29 @@ async function handleFeedback(request, env) {
   return jsonResponse({ ok: true, feedbackId: id, requestId }, 201, requestId);
 }
 
+async function handleAccessRequest(request, env) {
+  const requestId = requestIdFor(request);
+  const startedAt = Date.now();
+  const auth = await authenticateFirebaseRequest(request, { projectId: getPublicRuntimeConfig(env).firebase.projectId });
+  const user = await anonymizeUserId(auth.user?.uid);
+  if (!auth.ok) return jsonResponse({ error: auth.message, requestId }, auth.status, requestId);
+  // The token's verified email is the only address we record - the client
+  // cannot ask for a seat on behalf of a different address. This route stays
+  // outside the allowlist gate on purpose: it spends no provider quota, and
+  // the people who need it are exactly the ones the gate turns away.
+  const email = String(auth.user?.email || '').trim().toLowerCase();
+  if (!email) return jsonResponse({ error: 'Your account does not have an email address to request access with.', requestId }, 400, requestId);
+  console.log(JSON.stringify({ event: 'beta_access_request', requestId, user, email, submittedAt: new Date().toISOString(), durationMs: Date.now() - startedAt }));
+  return jsonResponse({ ok: true, requestId }, 201, requestId);
+}
+
 export async function handleWorkerRequest(request, env = {}, ctx = {}) {
   const url = new URL(request.url);
   if (request.method === 'GET' && ['/api/public-config', '/api/public-runtime-config'].includes(url.pathname)) {
     return jsonResponse(getPublicRuntimeConfig(env), 200, requestIdFor(request));
   }
   if (request.method === 'POST' && url.pathname === '/api/feedback') return handleFeedback(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/access-request') return handleAccessRequest(request, env);
   if (request.method === 'POST' && STREAM_ROUTES[url.pathname]) return handleStream(request, url.pathname, env);
   if (url.pathname.startsWith('/api/')) return jsonResponse({ error: 'Not found' }, 404);
   if (env?.ASSETS && typeof env.ASSETS.fetch === 'function') return env.ASSETS.fetch(request, env, ctx);
