@@ -1803,10 +1803,13 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .feedback-dialog textarea { color: #edf2ea; }
 :root[data-theme="light"] .feedback-dialog .eyebrow { color: var(--accent); }
 
-/* Light-theme dark-surface corrections (round 2). These panels keep their dark
-   backgrounds in the light theme, so every piece of text inside them must stay
-   light. The panel color cascades to each element that sets no color of its own. */
-:root[data-theme="light"] :root[data-theme="light"] .source-modal,
+
+/* Light-theme dark-surface corrections (round 2, revised). Only panels that
+   KEEP a dark background in the light theme are listed here; cards that turn
+   white (.aside-card, .research-snapshot, .theme-card, .radar-status-card,
+   .opportunity-card, .audience-review-toolbar, .audience-claim-editor) are not.
+   The panel color cascades to every element inside that sets no color of its own. */
+:root[data-theme="light"] .source-modal,
 :root[data-theme="light"] .source-snippet,
 :root[data-theme="light"] .campaign-differentiation,
 :root[data-theme="light"] .concept-card,
@@ -1816,7 +1819,6 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .territory-card,
 :root[data-theme="light"] .territory-comparison,
 :root[data-theme="light"] .campaign-overview-strip,
-:root[data-theme="light"] .research-snapshot,
 :root[data-theme="light"] .radar-summary,
 :root[data-theme="light"] .audience-snapshot,
 :root[data-theme="light"] .campaign-confirmation,
@@ -1824,19 +1826,16 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .research-unavailable,
 :root[data-theme="light"] .cta-box,
 :root[data-theme="light"] .voice-preview-card,
-:root[data-theme="light"] .theme-card,
 :root[data-theme="light"] .interpretation,
 :root[data-theme="light"] .campaign-notice,
 :root[data-theme="light"] .radar-notice,
 :root[data-theme="light"] .audience-review-gate,
 :root[data-theme="light"] .audience-review-note,
-:root[data-theme="light"] .audience-review-toolbar,
 :root[data-theme="light"] .audience-review-filter,
 :root[data-theme="light"] .audience-depth-option,
 :root[data-theme="light"] .audience-source-checks label,
 :root[data-theme="light"] .audience-review-actions button,
 :root[data-theme="light"] .audience-editor-actions .quiet-button,
-:root[data-theme="light"] .audience-claim-editor,
 :root[data-theme="light"] .audience-item,
 :root[data-theme="light"] .audience-item-hypothesis,
 :root[data-theme="light"] .audience-item-observed,
@@ -1844,17 +1843,12 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .audience-research-ready,
 :root[data-theme="light"] .audience-research-light,
 :root[data-theme="light"] .campaign-ready-banner,
-:root[data-theme="light"] .radar-status-card,
-:root[data-theme="light"] .radar-status-card.status-available,
-:root[data-theme="light"] .radar-status-card.status-limited,
-:root[data-theme="light"] .radar-status-card.status-needs-review,
 :root[data-theme="light"] .radar-intelligence-status,
 :root[data-theme="light"] .radar-stale-banner,
 :root[data-theme="light"] .research-light-banner,
 :root[data-theme="light"] .audience-update-banner,
 :root[data-theme="light"] .campaign-incomplete-banner,
 :root[data-theme="light"] .campaign-progress,
-:root[data-theme="light"] .opportunity-card,
 :root[data-theme="light"] .opportunity-compare,
 :root[data-theme="light"] .opportunity-thesis,
 :root[data-theme="light"] .opportunity-object,
@@ -1866,24 +1860,19 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .loading-board,
 :root[data-theme="light"] .validation-card,
 :root[data-theme="light"] .evidence-coverage-card,
-:root[data-theme="light"] .aside-card,
 :root[data-theme="light"] .toast,
 :root[data-theme="light"] .optional-details { color: #f0f2e9; }
 
-/* Muted labels, headings and shared link styles inside those dark panels use
-   shared variables that the light theme remaps to dark grays, so pin them back
-   to the dark-theme values here. */
+/* Muted labels and controls inside those dark panels use shared variables that
+   the light theme remaps to dark grays, so pin them back to the dark-theme values. */
 :root[data-theme="light"] .source-modal .modal-detail-grid span,
 :root[data-theme="light"] .source-modal .modal-close { color: #8e9989; }
 :root[data-theme="light"] .source-modal .modal-close:hover { color: #f0f2e9; }
-:root[data-theme="light"] .radar-status-card strong { color: #f0f2e9; }
-:root[data-theme="light"] .radar-status-card small { color: #8e9989; }
-:root[data-theme="light"] .opportunity-card h3 { color: #f0f2e9; }
-:root[data-theme="light"] .opportunity-card .confidence-high { color: #d8f77d; }
-:root[data-theme="light"] .theme-card p { color: #bcc3af; }
-:root[data-theme="light"] .theme-index { color: #8b9b67; }
-:root[data-theme="light"] .theme-sources { color: #d8f77d; }
-:root[data-theme="light"] .snapshot-lead p { color: #a7b098; }
-:root[data-theme="light"] .snapshot-metric span { color: #9da691; }
-:root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .research-snapshot, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .theme-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-toolbar, .audience-review-filter, .audience-depth-option, .audience-claim-editor, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-status-card, .radar-status-card.status-available, .radar-status-card.status-limited, .radar-status-card.status-needs-review, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-card, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .aside-card, .toast, .optional-details) :is(.eyebrow, .quiet-button, .text-button, .inline-link) { color: #d8f77d; }
-:root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .research-snapshot, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .theme-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-toolbar, .audience-review-filter, .audience-depth-option, .audience-claim-editor, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-status-card, .radar-status-card.status-available, .radar-status-card.status-limited, .radar-status-card.status-needs-review, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-card, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .aside-card, .toast, .optional-details) .field label { color: #b9bdb0; }
+
+/* Dark sub-panels sitting inside the white form cards: the light theme's
+   .form-card p rule would otherwise darken their text on the dark surface.
+   color: unset makes them inherit the panel color pinned above. */
+:root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-filter, .audience-depth-option, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .toast, .optional-details) p { color: unset; }
+
+:root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-filter, .audience-depth-option, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .toast, .optional-details) :is(.eyebrow, .quiet-button, .text-button, .inline-link) { color: #d8f77d; }
+:root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-filter, .audience-depth-option, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .toast, .optional-details) .field label { color: #b9bdb0; }
