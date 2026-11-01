@@ -206,6 +206,15 @@ export const authService = {
     return { error: null };
   },
 
+  async refreshUser() {
+    const firebase = await getClient();
+    if (!firebase) throw unavailableError();
+    const user = firebase.auth.currentUser;
+    if (!user) return { data: { user: null, session: null }, error: null };
+    await firebase.authApi.reload(user);
+    return { data: { user: toUser(user), session: toSession(user) }, error: null };
+  },
+
   onAuthStateChange(callback) {
     return getClient().then((firebase) => {
       if (!firebase) return { data: { subscription: { unsubscribe() {} } } };

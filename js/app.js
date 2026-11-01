@@ -254,7 +254,7 @@ function authPage(route) {
   const configNotice = state.auth.configured === false ? `<div class="config-notice" role="status">${icon('settings', 15)} <span>Authentication is not connected yet. Add the Firebase web configuration to the server environment to activate accounts.</span></div>` : '';
   let content = '';
   if (isVerify) {
-    content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ONE SMALL STEP</div><h1>Check your<br><em>inbox.</em></h1><p>We sent a verification link${email ? ` to <strong>${escapeHtml(email)}</strong>` : ''}. Verify your email before opening the workspace. If the verification email doesn't arrive, check your Spam folder.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-auth-action="resend">Resend verification email ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
+    content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ONE SMALL STEP</div><h1>Check your<br><em>inbox.</em></h1><p>We sent a verification link${email ? ` to <strong>${escapeHtml(email)}</strong>` : ''}. Verify your email before opening the workspace. Email delivery can take a few minutes; if it doesn't arrive, check your Spam folder. This page keeps checking in the background and opens the workspace the moment you're verified.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-auth-action="resend">Resend verification email ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
   } else if (isForgot) {
     content = `<div class="auth-form-card"><div class="eyebrow">ACCOUNT RECOVERY</div><h1>Reset your<br><em>password.</em></h1><p>Enter your email and we’ll send a secure reset link.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="alert">${escapeHtml(feedback.message)}</div>` : ''}<form id="forgot-form" class="auth-form" novalidate><div class="field"><label for="auth-email">Email address</label><input id="auth-email" name="email" type="email" autocomplete="email" required value="${escapeHtml(email)}" placeholder="you@company.com"></div><button class="button button-primary button-wide" type="submit">Send reset link ${icon('arrow', 16)}</button></form><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
   } else if (isReset) {
@@ -280,6 +280,8 @@ function accessRequestModal() {
 }
 
 function renderPublic() {
+  if (state.page === 'verify-email' && state.auth.status === 'signed-in-unverified') startVerificationWatcher();
+  else stopVerificationWatcher();
   root.innerHTML = state.page === 'landing' ? landingPage() : authPage(state.page);
   attachPublicEvents();
 }
@@ -295,6 +297,51 @@ function attachThemeEvents() {
 function setAuthFeedback(type, message) {
   state.auth.feedback = { type, message };
   render();
+}
+
+let verificationWatcher = null;
+let resendCooldownUntil = 0;
+
+function stopVerificationWatcher() {
+  if (verificationWatcher) {
+    window.clearInterval(verificationWatcher);
+    verificationWatcher = null;
+  }
+}
+
+function startVerificationWatcher() {
+  stopVerificationWatcher();
+  if (state.auth.status !== 'signed-in-unverified') return;
+  const email = state.auth.user?.email || state.auth.pendingEmail || '';
+  if (!email) return;
+  const autoSentKey = `mm-verify-autosent:${email}`;
+  let autoResent = false;
+  try { autoResent = window.sessionStorage.getItem(autoSentKey) === '1'; } catch { /* storage can be unavailable */ }
+  let elapsed = 0;
+  verificationWatcher = window.setInterval(async () => {
+    if (state.auth.status !== 'signed-in-unverified') { stopVerificationWatcher(); return; }
+    elapsed += 5;
+    try {
+      const { data, error } = await authService.refreshUser();
+      const user = data?.user;
+      if (!error && user && isVerifiedUser(user)) {
+        stopVerificationWatcher();
+        await applyAuthState(data.session, user);
+        return;
+      }
+    } catch { /* keep polling; the resend button stays available */ }
+    if (!autoResent && elapsed >= 75) {
+      autoResent = true;
+      try { window.sessionStorage.setItem(autoSentKey, '1'); } catch { /* ignore */ }
+      try {
+        const { error } = await authService.resendVerification(email);
+        if (!error) {
+          resendCooldownUntil = Date.now() + 60000;
+          setAuthFeedback('success', 'Still nothing in the inbox? We sent a second verification link just in case.');
+        }
+      } catch { /* stay quiet; the resend button remains available */ }
+    }
+  }, 5000);
 }
 
 function resetAccountState(userId) {
@@ -552,11 +599,16 @@ function attachPublicEvents() {
   document.querySelector('[data-auth-action="resend"]')?.addEventListener('click', async (event) => {
     const email = state.auth.pendingEmail;
     if (!email) return setAuthFeedback('error', 'Enter your email on the sign-in screen so we know where to send the verification link.');
+    if (Date.now() < resendCooldownUntil) {
+      const wait = Math.ceil((resendCooldownUntil - Date.now()) / 1000);
+      return setAuthFeedback('error', `The last link is still on its way. You can resend again in ${wait}s.`);
+    }
     event.currentTarget.disabled = true;
     try {
       const { error } = await authService.resendVerification(email);
       if (error) throw error;
-      setAuthFeedback('success', 'A fresh verification link is on its way.');
+      resendCooldownUntil = Date.now() + 60000;
+      setAuthFeedback('success', 'A fresh verification link is on its way. This page watches for it and opens the workspace the moment you verify.');
     } catch (error) {
       event.currentTarget.disabled = false;
       setAuthFeedback('error', authErrorMessage(error));

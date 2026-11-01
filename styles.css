@@ -1233,6 +1233,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
+/* Movement-only entrances for hero copy: no opacity change, so text never
+   renders invisible while an entrance animation runs. */
+@keyframes landing-rise {
+  from { transform: translate3d(0, 12px, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes landing-drop {
+  from { transform: translate3d(0, -10px, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
 @keyframes landing-scale-in {
   from { opacity: 0; transform: scale(.94); }
   to { opacity: 1; transform: scale(1); }
@@ -1259,12 +1271,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .landing-page [id] { scroll-margin-top: 96px; }
-.landing-page .public-header { animation: landing-fade-down .65s cubic-bezier(.22, 1, .36, 1) both; }
-.landing-hero-copy > .eyebrow { animation: landing-fade-up .7s .08s both; }
-.landing-hero-copy > h1 { animation: landing-fade-up .8s .16s both; }
-.landing-hero-copy > p { animation: landing-fade-up .75s .28s both; }
-.landing-hero-actions { animation: landing-fade-up .75s .4s both; }
-.landing-proof-line { animation: landing-fade-up .75s .52s both; }
+/* Hero copy enters with movement only: the headline is readable on the first
+   paint and no entrance animation ever hides it. */
+.landing-page .public-header { animation: landing-drop .45s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-hero-copy > .eyebrow { animation: landing-rise .45s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-hero-copy > h1 { animation: landing-rise .5s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-hero-copy > p { animation: landing-rise .55s .04s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-hero-actions { animation: landing-rise .55s .08s cubic-bezier(.22, 1, .36, 1) both; }
+.landing-proof-line { animation: landing-rise .55s .12s cubic-bezier(.22, 1, .36, 1) both; }
 .landing-hero-visual { animation: landing-scale-in 1s .16s cubic-bezier(.22, 1, .36, 1) both; }
 .landing-hero-visual .ring-large { animation: landing-orbit 28s linear infinite; }
 .landing-hero-visual .ring-small { animation: landing-orbit-reverse 22s linear infinite; }
