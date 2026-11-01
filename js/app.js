@@ -314,13 +314,8 @@ function startVerificationWatcher() {
   if (state.auth.status !== 'signed-in-unverified') return;
   const email = state.auth.user?.email || state.auth.pendingEmail || '';
   if (!email) return;
-  const autoSentKey = `mm-verify-autosent:${email}`;
-  let autoResent = false;
-  try { autoResent = window.sessionStorage.getItem(autoSentKey) === '1'; } catch { /* storage can be unavailable */ }
-  let elapsed = 0;
   verificationWatcher = window.setInterval(async () => {
     if (state.auth.status !== 'signed-in-unverified') { stopVerificationWatcher(); return; }
-    elapsed += 5;
     try {
       const { data, error } = await authService.refreshUser();
       const user = data?.user;
@@ -330,17 +325,6 @@ function startVerificationWatcher() {
         return;
       }
     } catch { /* keep polling; the resend button stays available */ }
-    if (!autoResent && elapsed >= 75) {
-      autoResent = true;
-      try { window.sessionStorage.setItem(autoSentKey, '1'); } catch { /* ignore */ }
-      try {
-        const { error } = await authService.resendVerification(email);
-        if (!error) {
-          resendCooldownUntil = Date.now() + 60000;
-          setAuthFeedback('success', 'Still nothing in the inbox? We sent a second verification link just in case.');
-        }
-      } catch { /* stay quiet; the resend button remains available */ }
-    }
   }, 5000);
 }
 
