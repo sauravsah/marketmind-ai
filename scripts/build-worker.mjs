@@ -13,6 +13,7 @@ cpSync(join(project, 'favicon.svg'), join(dist, 'favicon.svg'));
 cpSync(join(project, 'favicon.ico'), join(dist, 'favicon.ico'));
 cpSync(join(project, 'favicon-32.png'), join(dist, 'favicon-32.png'));
 cpSync(join(project, 'apple-touch-icon.png'), join(dist, 'apple-touch-icon.png'));
+cpSync(join(project, 'og-image.png'), join(dist, 'og-image.png'));
 cpSync(join(project, 'js'), join(dist, 'js'), { recursive: true });
 cpSync(join(project, 'js'), join(dist, 'server', 'js'), { recursive: true });
 cpSync(join(project, 'server', 'config.mjs'), join(dist, 'server', 'config.mjs'));
