@@ -1478,6 +1478,8 @@ html { color-scheme: dark; }
 :root[data-theme="light"] .auth-form-card p,
 :root[data-theme="light"] .auth-message-card p,
 :root[data-theme="light"] .migration-card p { color: var(--text-secondary); }
+:root[data-theme="light"] .form-feedback.error { color: #852a1a; background: #fbe9e4; border-color: #e2a191; }
+:root[data-theme="light"] .config-notice { color: #6d5420; background: #f7edd8; border-color: #dcc08a; }
 :root[data-theme="light"] .config-notice { background: #fff8e6; border-color: #ead8a9; color: #765a25; }
 :root[data-theme="light"] .tone-option { background: #fff; border-color: #d5e1d1; color: #5e6c62; }
 :root[data-theme="light"] .tone-option:hover { border-color: #a9c79b; color: #263929; }
