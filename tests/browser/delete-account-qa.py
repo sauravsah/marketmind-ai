@@ -103,8 +103,10 @@ try:
   p2.route('**/firebasejs/**/firebase-auth.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=AUTH_STUB))
   p2.route('**/firebasejs/**/firebase-firestore.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=FS_STUB_PENDING))
   p2.goto('http://localhost:4190/#workspace')
-  p2.get_by_text('partly complete',exact=False).wait_for(timeout=10000)
+  p2.get_by_text('did not finish',exact=False).wait_for(timeout=10000)
   checks['pending_dialog_auto_opens']=p2.get_by_role('heading',name='Finish deleting',exact=False).count()==1
+  checks['pending_cancel_is_close_not_keep']=p2.locator('[data-delete-account-dialog] .text-button').inner_text()=='Close' and p2.get_by_text('keep my account',exact=False).count()==0
+  checks['pending_lock_persistence_stated']=p2.get_by_text('stays locked',exact=False).count()==1
   p2.screenshot(path=f'{OUT}/delete-pending-1280.png')
   p2.locator('#delete-account-password').fill('correct-password')
   p2.locator('#delete-account-confirm').fill('DELETE')
