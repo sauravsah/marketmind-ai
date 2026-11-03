@@ -53,6 +53,10 @@ test('non-owners cannot touch another user\'s data or tombstone', async () => {
   await assertFails(getDoc(doc(attacker, 'users', 'u1')));
   await assertFails(deleteDoc(doc(attacker, 'users', 'u1')));
   await assertFails(setDoc(doc(attacker, 'accountTombstones', 'u1'), tombstoneData()));
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'accountTombstones', 'u1'), { schema: 1, deletedAt: Timestamp.now() });
+  });
+  await assertFails(getDoc(doc(attacker, 'accountTombstones', 'u1')));
 });
 
 test('tombstone accepts only the minimal marker and becomes immutable', async () => {
@@ -60,8 +64,9 @@ test('tombstone accepts only the minimal marker and becomes immutable', async ()
   await assertFails(setDoc(tombstone('u2'), { schema: 1, deletedAt: Timestamp.now(), extra: 'x' }));
   await assertFails(setDoc(tombstone('u3'), { schema: 2, deletedAt: Timestamp.now() }));
   await assertFails(setDoc(tombstone('u4'), { schema: 1, deletedAt: 'not-a-timestamp' }));
-  // No client may read, modify, or remove a tombstone - not even its owner.
-  await assertFails(getDoc(tombstone('u1')));
+  // The owner can read it back (so a denied create can be verified); no
+  // client may modify or remove it - not even the owner.
+  await assertSucceeds(getDoc(tombstone('u1')));
   await assertFails(setDoc(tombstone('u1'), tombstoneData()));
   await assertFails(deleteDoc(tombstone('u1')));
 });

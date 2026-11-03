@@ -212,10 +212,14 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
       // Firestore converts the Date to a Timestamp; the rules require one.
       await api.setDoc(tombstoneRef(), { schema: 1, deletedAt: new Date() });
     } catch (error) {
-      // permission-denied on the tombstone means a previous deletion attempt
-      // already wrote it: clients may create it once and can never update or
-      // delete it, so the lockout is already active and cleanup can continue.
-      if (!isPermissionDenied(error)) {
+      // A denied tombstone write only proves the lockout if the marker is
+      // actually there: undeployed rules or an invalid write deny too, and
+      // proceeding unprotected would delete content that stale clients could
+      // recreate. Read the marker back before trusting the denial - clients
+      // may create it once and can never update or delete it, so an existing
+      // tombstone always means the lockout is active.
+      const existing = isPermissionDenied(error) ? await api.getDoc(tombstoneRef()).catch(() => null) : null;
+      if (!existing?.exists()) {
         error.deletionStage = 'tombstone';
         error.strategiesDeleted = 0;
         throw error;
@@ -245,5 +249,24 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
     return { strategiesDeleted };
   }
 
-  return { getWorkspace, saveWorkspace, requestBetaAccess, getStrategies, saveStrategy, migrateLocalData, deleteAccountData, workspaceId };
+  // True when a previous deletion wrote the server-side tombstone but did
+  // not finish (the sign-in still exists). Locks this repository's writes so
+  // in-tab saves fail with the clear deletion message instead of a raw
+  // permission error, and lets the UI offer to finish the deletion instead
+  // of loading or recreating the workspace.
+  async function isDeletionPending() {
+    try {
+      const snapshot = await api.getDoc(tombstoneRef());
+      if (snapshot?.exists()) {
+        deleting = true;
+        return true;
+      }
+    } catch (error) {
+      // Tombstones are only readable once the rules are deployed; a read
+      // failure must not break pre-feature loads, so treat it as not pending.
+    }
+    return false;
+  }
+
+  return { getWorkspace, saveWorkspace, requestBetaAccess, getStrategies, saveStrategy, migrateLocalData, deleteAccountData, isDeletionPending, workspaceId };
 }

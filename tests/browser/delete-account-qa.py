@@ -40,6 +40,7 @@ export const getDocs=async r=>({docs:[...store.keys()].filter(k=>k.startsWith(r.
 export const setDoc=async(r,d)=>{window.__calls.push('setDoc:'+r.path);store.set(r.path,{...(store.get(r.path)||{}),...d});};
 export const deleteDoc=async(r)=>{window.__calls.push('deleteDoc:'+r.path);store.delete(r.path);};
 '''
+FS_STUB_PENDING=FS_STUB.replace("const store=new Map([\n ['db/users/qa-delete',{name:'QA Workspace',brandProfile:{name:'Stride QA'}}],\n ['db/users/qa-delete/strategies/s1',{payload:{id:'s1',idea:'First brief',updatedAt:'2026-01-01'}}],\n ['db/users/qa-delete/strategies/s2',{payload:{id:'s2',idea:'Second brief',updatedAt:'2026-01-02'}}],\n]);","const store=new Map([\n ['db/accountTombstones/qa-delete',{schema:1,deletedAt:null}],\n]);")
 checks={}
 srv=subprocess.Popen(['node','server.mjs'],cwd=P,env={**os.environ,'PORT':'4190'},stdout=subprocess.DEVNULL)
 try:
@@ -91,6 +92,26 @@ try:
   page.screenshot(path=f'{OUT}/delete-done-1280.png')
   checks['no_page_errors']=not errors
   checks['no_analytics']=not external
+
+  # Pending deletion: a prior attempt tombstoned the account and removed the
+  # workspace, but the sign-in remains. The app must recognize it on load and
+  # offer to finish, not load or recreate the workspace.
+  p2=b.new_page(viewport={'width':1280,'height':900},reduced_motion='reduce')
+  p2.route('**/*',lambda r:r.abort() if '/api/' in r.request.url or 'analytics' in r.request.url or 'googletagmanager' in r.request.url else r.continue_())
+  p2.route('**/api/public-runtime-config',lambda r:r.fulfill(status=200,content_type='application/json',body=CONFIG))
+  p2.route('**/firebasejs/**/firebase-app.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=APP_STUB))
+  p2.route('**/firebasejs/**/firebase-auth.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=AUTH_STUB))
+  p2.route('**/firebasejs/**/firebase-firestore.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=FS_STUB_PENDING))
+  p2.goto('http://localhost:4190/#workspace')
+  p2.get_by_text('partly complete',exact=False).wait_for(timeout=10000)
+  checks['pending_dialog_auto_opens']=p2.get_by_role('heading',name='Finish deleting',exact=False).count()==1
+  p2.screenshot(path=f'{OUT}/delete-pending-1280.png')
+  p2.locator('#delete-account-password').fill('correct-password')
+  p2.locator('#delete-account-confirm').fill('DELETE')
+  p2.get_by_role('button',name='Permanently delete my account',exact=True).click()
+  p2.locator('body').get_by_text('cloud workspace data were deleted',exact=False).wait_for(timeout=8000)
+  checks['pending_retry_completes']=True
+  p2.close()
 
   # Mobile 390: dialog fits without horizontal overflow, wrong-password tall
   # state keeps the confirm field and delete button reachable.

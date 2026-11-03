@@ -18,11 +18,15 @@ service cloud.firestore {
 
     match /accountTombstones/{userId} {
       // Minimal non-content marker: schema and deletion timestamp only.
+      // The owner can read it back so a denied create can be verified (a
+      // denial alone does not prove the marker exists); no client - not even
+      // the owner - can ever modify or remove it.
       allow create: if signedInOwner(userId)
         && request.resource.data.keys().hasOnly(['schema', 'deletedAt'])
         && request.resource.data.schema == 1
         && request.resource.data.deletedAt is timestamp;
-      allow read, update, delete: if false;
+      allow read: if signedInOwner(userId);
+      allow update, delete: if false;
     }
 
     match /users/{userId} {

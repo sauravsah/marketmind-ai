@@ -74,6 +74,39 @@ test('a tombstone failure stops deletion before any data is touched', async () =
   assert.equal(firestore.docs.size, 3);
 });
 
+test('a denied tombstone write without an existing marker aborts before any data is touched', async () => {
+  // Undeployed rules or an invalid write also deny: the denial alone must
+  // not be trusted, so deletion aborts and nothing is removed.
+  const firestore = makeFirestore();
+  firestore.api.setDoc = async () => {
+    const e = new Error('Missing or insufficient permissions.');
+    e.code = 'permission-denied';
+    throw e;
+  };
+  const repository = makeRepository(firestore);
+  await assert.rejects(repository.deleteAccountData(), (error) => {
+    assert.equal(error.deletionStage, 'tombstone');
+    assert.equal(error.strategiesDeleted, 0);
+    return true;
+  });
+  assert.equal(firestore.docs.size, 3);
+  assert.equal(firestore.order.length, 0);
+});
+
+test('isDeletionPending reflects the tombstone and locks writes when pending', async () => {
+  const firestore = makeFirestore();
+  const repository = makeRepository(firestore);
+  assert.equal(await repository.isDeletionPending(), false);
+  await repository.deleteAccountData();
+  const reloaded = makeRepository(firestore);
+  assert.equal(await reloaded.isDeletionPending(), true);
+  await assert.rejects(reloaded.saveWorkspace({ workspaceName: 'sneaky' }), /deletion is in progress/i);
+  // A read failure (e.g. rules not deployed yet) must not break normal loads.
+  const broken = makeFirestore();
+  broken.api.getDoc = async () => { throw new Error('permission-denied'); };
+  assert.equal(await makeRepository(broken).isDeletionPending(), false);
+});
+
 test('a non-permission error still aborts even if the tombstone exists', async () => {
   const firestore = makeFirestore();
   const repository = makeRepository(firestore);
