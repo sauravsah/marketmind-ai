@@ -740,7 +740,11 @@ const JOURNEY_STAGES = [
 ];
 
 function journeyState() {
-  const strategy = state.strategy || {};
+  // Progression reflects saved work only: an in-memory brief draft (for
+  // example the onboarding prefill) must not mark a stage complete before
+  // the user saves it or starts research.
+  const saved = state.strategies.find((item) => item.id === state.strategy?.id);
+  const strategy = saved || {};
   const hasBrief = Boolean(strategy.idea?.trim() && strategy.market?.trim());
   const hasResearch = Boolean(strategy.research?.meta?.researchedAt || strategy.research?.sources?.length);
   const hasAudience = Boolean(strategy.audienceInsights);
@@ -2119,6 +2123,14 @@ function navigate(page) {
 }
 
 function attachGlobalEvents() {
+  if (!window.__onboardingEscBound) {
+    window.__onboardingEscBound = true;
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !state.onboarding) return;
+      event.preventDefault();
+      closeOnboarding(state.onboarding.view === 'sample' ? 'sample-leave' : 'dismissed');
+    });
+  }
   attachThemeEvents();
   document.querySelectorAll('[data-route]').forEach((element) => element.addEventListener('click', (event) => { if (element.tagName === 'A') event.preventDefault(); document.body.classList.remove('menu-open'); if (element.dataset.newStrategy === 'true') state.strategy = createDefaultStrategy(); navigate(element.dataset.route); }));
   document.querySelectorAll('[data-action="open-menu"]').forEach((element) => element.addEventListener('click', () => document.body.classList.add('menu-open')));

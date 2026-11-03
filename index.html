@@ -1,17 +1,27 @@
 <!doctype html>
 <html lang="en">
   <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-G4Q8FCXC3E"></script>
+<!-- Analytics (GA + self-hosted Umami, aggregate only). Loaded only on the
+     live site so local development and automated QA never send telemetry. -->
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-G4Q8FCXC3E');
+  (function () {
+    var host = location.hostname;
+    if (host !== 'marketmind-ai-five.vercel.app') return;
+    var ga = document.createElement('script');
+    ga.async = true;
+    ga.src = 'https://www.googletagmanager.com/gtag/js?id=G-G4Q8FCXC3E';
+    document.head.appendChild(ga);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { dataLayer.push(arguments); };
+    gtag('js', new Date());
+    gtag('config', 'G-G4Q8FCXC3E');
+    var umami = document.createElement('script');
+    umami.defer = true;
+    umami.src = 'https://saurav-analytics.netlify.app/script.js';
+    umami.setAttribute('data-website-id', '25a3af2d-6aa6-4ec1-99c1-97b45a362cb0');
+    document.head.appendChild(umami);
+  })();
 </script>
-
-<!-- Umami self-hosted analytics (private, aggregate only) -->
-<script defer src="https://saurav-analytics.netlify.app/script.js" data-website-id="25a3af2d-6aa6-4ec1-99c1-97b45a362cb0"></script>
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

@@ -124,16 +124,15 @@ async function waitForInitialUser(auth, onAuthStateChanged) {
 // same page for a consumed and an expired link, so the distinction here comes
 // from the error code when the app itself handles the action link.
 export function describeEmailActionError(code) {
-  if (code === 'auth/expired-action-code') {
+  // Firebase surfaces auth/invalid-action-code for links that were already
+  // used, are malformed, or have expired - and auth/expired-action-code for
+  // expired ones. In practice a used-then-reopened link and an expired link
+  // are easy to confuse, so the copy keeps both possibilities open instead
+  // of claiming one cause with certainty.
+  if (code === 'auth/expired-action-code' || code === 'auth/invalid-action-code') {
     return {
-      title: 'That verification link has expired.',
-      body: 'Verification links only stay valid for a while. Send yourself a fresh one below and open the newest email.',
-    };
-  }
-  if (code === 'auth/invalid-action-code') {
-    return {
-      title: 'That verification link was already used.',
-      body: 'If you opened it earlier, your email may already be verified - this page keeps checking automatically. If nothing happens, send a fresh link below.',
+      title: 'That verification link did not work.',
+      body: 'The link may have expired, or it was already used. If you opened it before, your email may already be verified - this page keeps checking automatically and opens the workspace the moment you are. If nothing happens within a minute, send a fresh link below and open the newest email.',
     };
   }
   return {

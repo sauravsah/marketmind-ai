@@ -10,7 +10,7 @@ const verified=params.get('qa_verified')!=='0';
 const user={id:'onboarding-qa',uid:'onboarding-qa',email:'qa@example.invalid',emailVerified:verified};
 export const authService={init:async()=>({configured:true,user,session:{user}}),getClient:async()=>({db:{},firestoreApi:api}),onAuthStateChange:async()=>({data:{subscription:{unsubscribe(){}}}}),getIdToken:async()=>null,signOut:async()=>({})};
 export const authErrorMessage=e=>e.message;export const authenticatedFetch=(i,o)=>fetch(i,o);
-export const describeEmailActionError=code=>({title:code==='auth/expired-action-code'?'That verification link has expired.':code==='auth/invalid-action-code'?'That verification link was already used.':'That verification link did not work.',body:'Send yourself a fresh link below and open the newest email.'});
+export const describeEmailActionError=code=>({title:'That verification link did not work.',body:'The link may have expired, or it was already used. If you opened it before, your email may already be verified - this page keeps checking automatically and opens the workspace the moment you are. If nothing happens within a minute, send a fresh link below and open the newest email.'});
 '''
 srv=subprocess.Popen(['node','server.mjs'],cwd=P,env={**os.environ,'PORT':'4187'},stdout=subprocess.DEVNULL)
 try:
@@ -19,6 +19,7 @@ try:
   for width in [320,390,1280]:
    page=b.new_page(viewport={'width':width,'height':900},reduced_motion='reduce');errors=[];calls=[]
    page.on('pageerror',lambda e:errors.append(str(e)))
+   page.on('request',lambda r:calls.append(r.url))
    page.route('**/js/auth.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=MOCK))
    def block(r):
     calls.append(r.request.url);r.abort()
@@ -51,6 +52,8 @@ try:
    assert page.locator('#strategy-market').input_value()=='India'
    assert page.locator('#strategy-audience').input_value()=='Gen Z students in Indian metros'
    assert page.locator('#strategy-objective').input_value()=='Launch'
+   assert '0 / 5 complete' in page.locator('.progression-count').inner_text().lower(), page.locator('.progression-count').inner_text()
+   assert 'Complete' not in page.locator('.progression-stage',has_text='Strategy').inner_text()
    page.screenshot(path=f'{OUT}/prefilled-brief-{width}.png',full_page=True)
    brand=page.evaluate('JSON.parse(localStorage.getItem("marketmind.account.onboarding-qa.brand-profile"))')
    assert brand['name']=='Stride QA' and brand['industry']=='Consumer app' and brand['audience']=='Gen Z students in Indian metros', brand
@@ -81,15 +84,28 @@ try:
    page.get_by_role('button',name='Build campaign direction',exact=True).click()
    page.get_by_text('Run your first 5K',exact=False).first.wait_for()
    page.screenshot(path=f'{OUT}/sample-campaign-{width}.png')
+   dialog=page.locator('.sample-dialog')
+   dialog.evaluate('el=>el.scrollTop=el.scrollHeight')
+   leave=page.get_by_text('Leave example',exact=True)
+   bb=leave.bounding_box(); vp=page.viewport_size
+   assert bb and 0<=bb['y'] and bb['y']+bb['height']<=vp['height'], (width,bb)
+   page.screenshot(path=f'{OUT}/sample-campaign-bottom-{width}.png')
+   # keyboard exit: Escape closes the overlay like the X button
+   page.keyboard.press('Escape')
+   assert page.locator('.onboarding-overlay').count()==0
+   page.get_by_role('button',name='Explore an example',exact=True).click()
+   page.get_by_text('SAMPLE WORKSPACE · FIXED EXAMPLE DATA · NOT LIVE RESEARCH',exact=True).wait_for()
    page.get_by_text('Leave example',exact=True).click()
    page.locator('h1').wait_for()
    assert page.locator('.onboarding-overlay').count()==0
    # 6. Safety rails: zero provider/API calls, no page errors, no sideways scroll.
    provider_calls=[u for u in calls if u.startswith('http://localhost:4187/api/')]
    assert not provider_calls,provider_calls
+   telemetry=[u for u in calls if any(d in u for d in ('googletagmanager','google-analytics','saurav-analytics'))]
+   assert not telemetry,telemetry
    assert not errors,errors
    assert not page.evaluate('document.documentElement.scrollWidth>innerWidth')
-   print(json.dumps({'width':width,'auto_open':'passed','questions_prefill':'passed','sample_gates':'passed','provider_calls':len(provider_calls),'page_errors':errors}))
+   print(json.dumps({'width':width,'auto_open':'passed','questions_prefill':'passed','sample_gates':'passed','progression_holds':'passed','esc_exit':'passed','provider_calls':len(provider_calls),'page_errors':errors}))
    page.close()
   # Unverified users see the recovery hint on the verify screen.
   page=b.new_page(viewport={'width':390,'height':900},reduced_motion='reduce')

@@ -1917,7 +1917,7 @@ html { color-scheme: dark; }
 .onboarding-card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 
 /* Example workspace (sample) */
-.sample-dialog { width: min(100%, 620px); }
+.sample-dialog { width: min(100%, 620px); max-height: calc(100vh - 48px); overflow-y: auto; overscroll-behavior: contain; padding-bottom: 40px; }
 .sample-banner { margin: -8px 0 16px; padding: 8px 10px; border: 1px solid #536530; border-radius: 4px; background: #1d2416; color: #b9d18a; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-align: center; }
 .sample-title { margin: 0 0 4px; font-size: 24px; }
 .sample-stages { margin: 12px 0 20px; }

@@ -2,15 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { describeEmailActionError } from '../js/auth.js';
 
-test('an expired verification link gets a fresh-link recovery', () => {
+// Firebase cannot reliably distinguish an expired link from a consumed one
+// (used, malformed and expired links share codes across SDK versions), so the
+// recovery copy keeps both possibilities open instead of claiming one cause.
+test('an expired verification link gets ambiguous, fresh-link recovery copy', () => {
   const copy = describeEmailActionError('auth/expired-action-code');
-  assert.match(copy.title, /expired/i);
-  assert.match(copy.body, /fresh/i);
+  assert.match(copy.title, /did not work/i);
+  assert.match(copy.body, /expired/i);
+  assert.match(copy.body, /already used/i);
+  assert.match(copy.body, /fresh link/i);
 });
 
-test('a consumed verification link explains the account may already be verified', () => {
+test('a consumed verification link gets the same ambiguity, and notes the account may already be verified', () => {
   const copy = describeEmailActionError('auth/invalid-action-code');
-  assert.match(copy.title, /already used/i);
+  assert.equal(copy.title, describeEmailActionError('auth/expired-action-code').title);
   assert.match(copy.body, /already be verified/i);
   assert.match(copy.body, /fresh link/i);
 });
