@@ -175,5 +175,36 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
     return { summary, workspace: savedWorkspace, strategies: [...remoteStrategies, ...imported], imported };
   }
 
-  return { getWorkspace, saveWorkspace, requestBetaAccess, getStrategies, saveStrategy, migrateLocalData, workspaceId };
+  // Permanently deletes every cloud record owned by this account: all
+  // strategy documents first, then the workspace document itself. Every
+  // step is idempotent - deleting an absent document is a no-op - so a
+  // partial failure can be retried safely, and the caller learns how far
+  // it got from the thrown step marker.
+  async function deleteAccountData() {
+    assertCurrent();
+    const snapshot = await api.getDocs(strategyCollectionRef());
+    assertCurrent();
+    let strategiesDeleted = 0;
+    try {
+      for (const document of snapshot?.docs || []) {
+        await api.deleteDoc(document.ref);
+        strategiesDeleted += 1;
+      }
+    } catch (error) {
+      error.deletionStage = 'strategies';
+      error.strategiesDeleted = strategiesDeleted;
+      throw error;
+    }
+    assertCurrent();
+    try {
+      await api.deleteDoc(workspaceRef());
+    } catch (error) {
+      error.deletionStage = 'workspace';
+      error.strategiesDeleted = strategiesDeleted;
+      throw error;
+    }
+    return { strategiesDeleted };
+  }
+
+  return { getWorkspace, saveWorkspace, requestBetaAccess, getStrategies, saveStrategy, migrateLocalData, deleteAccountData, workspaceId };
 }

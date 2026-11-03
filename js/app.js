@@ -89,6 +89,7 @@ const state = {
   onboarding: null,
   cloud: { status: 'idle', repository: null, error: null, userId: null },
   migration: { status: 'idle', summary: null, error: null },
+  deleteAccount: { open: false, working: false, error: null },
   betaFeedback: { open: false, sending: false, error: null },
   accessRequest: { open: false, sending: false, sent: false, error: null },
 };
@@ -301,6 +302,13 @@ function authPage(route) {
   return `<div class="public-page auth-page"><div class="auth-shell"><div class="auth-topbar"><a class="public-brand auth-brand" href="#landing" data-route="landing" aria-label="MarketMind home"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span><strong>MarketMind</strong><small>MARKETING INTELLIGENCE</small></span></a>${themeToggleMarkup()}</div>${configNotice}<div class="auth-layout"><div class="auth-aside"><div class="eyebrow">${isVerify ? 'EMAIL VERIFICATION' : 'MARKETING INTELLIGENCE FOR WHAT COMES NEXT'}</div><h2>${isVerify ? 'Your workspace is<br><em>almost ready.</em>' : 'Keep the signal.<br><em>Lose the noise.</em>'}</h2><p>${isVerify ? 'A verified account keeps your strategy context and intelligence private to you.' : 'A focused workflow for teams who need to make a better next move, with evidence and uncertainty in the same frame.'}</p><div class="auth-aside-line"></div><span class="auth-aside-note">STRATEGY → MARKET → AUDIENCE → OPPORTUNITY → CAMPAIGN</span></div>${content}</div><footer class="public-footer auth-footer"><span>© ${new Date().getFullYear()} MarketMind AI</span><button class="inline-link" type="button" data-route="landing">Back to home</button></footer></div></div>`;
 }
 
+function deleteAccountModal() {
+  const dialog = state.deleteAccount;
+  if (!dialog.open) return '';
+  const strategyCount = state.strategies.length;
+  return `<div class="feedback-overlay" data-action="close-delete-account"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title" data-delete-account-dialog><button class="modal-close" type="button" aria-label="Cancel account deletion" data-action="close-delete-account">${icon('close', 17)}</button><div class="eyebrow">PERMANENT DELETION</div><h2 id="delete-account-title">Delete your<br><em>account?</em></h2><p>This permanently deletes:</p><ul class="delete-account-list"><li>Your MarketMind sign-in (${escapeHtml(state.auth.user?.email || 'this email')})</li><li>Your workspace, brand context, and ${strategyCount} saved ${strategyCount === 1 ? 'strategy' : 'strategies'} from the cloud</li><li>The local copy stored on this device</li></ul><p class="delete-account-limits">Already-collected server logs and anonymized analytics cannot be removed. This cannot be undone.</p>${dialog.error ? `<div class="form-feedback error" role="alert">${escapeHtml(dialog.error)}</div>` : ''}<form id="delete-account-form" class="auth-form" novalidate><div class="field"><label for="delete-account-password">Your password</label><input id="delete-account-password" name="password" type="password" autocomplete="current-password" required placeholder="Confirms it is really you"></div><div class="field"><label for="delete-account-confirm">Type DELETE to confirm</label><input id="delete-account-confirm" name="confirm" type="text" autocomplete="off" required placeholder="DELETE"></div><button class="button button-danger button-wide" type="submit" ${dialog.working ? 'disabled' : ''}>${dialog.working ? 'Deleting…' : 'Permanently delete my account'}</button></form><button class="text-button centered" type="button" data-action="close-delete-account">Cancel - keep my account</button></section></div>`;
+}
+
 function betaFeedbackModal() {
   if (!state.betaFeedback.open) return '';
   return `<div class="feedback-overlay" data-action="close-feedback"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-title" data-feedback-dialog><button class="modal-close" type="button" aria-label="Close feedback" data-action="close-feedback">${icon('close', 17)}</button><div class="eyebrow">BETA FEEDBACK</div><h2 id="feedback-title">Help us make the next move clearer.</h2><p>Share a short note about what worked, what felt confusing, or what you would change.</p>${state.betaFeedback.error ? `<div class="form-feedback error" role="alert">${escapeHtml(state.betaFeedback.error)}</div>` : ''}<form id="beta-feedback-form"><label for="feedback-category">Feedback type</label><select id="feedback-category" name="category" required><option value="bug">Something is broken</option><option value="confusing">Something is confusing</option><option value="idea">I have an idea</option><option value="praise">Something worked well</option><option value="other">Other</option></select><label for="feedback-message">Your note</label><textarea id="feedback-message" name="message" rows="5" maxlength="1200" required placeholder="What should we know?"></textarea><div class="feedback-dialog-actions"><button class="button button-secondary" type="button" data-action="close-feedback">Cancel</button><button class="button button-primary" type="submit" ${state.betaFeedback.sending ? 'disabled' : ''}>${state.betaFeedback.sending ? 'Sending…' : 'Send feedback'} ${icon('arrow', 15)}</button></div></form></section></div>`;
@@ -445,6 +453,7 @@ function resetAccountState(userId) {
   state.audienceEditingClaimId = state.audienceValidationClaimId = null;
   state.betaFeedback = { open: false, sending: false, error: null };
   state.accessRequest = { open: false, sending: false, sent: false, error: null };
+  state.deleteAccount = { open: false, working: false, error: null };
 }
 
 async function loadCloudWorkspace() {
@@ -737,7 +746,7 @@ function renderShell(content) {
         </header>
         <div class="page-wrap">${workspaceSyncNotice}${progressionRail()}${content}</div>
       </main>
-      <div id="toast-region" class="toast-region" aria-live="polite"></div>${betaFeedbackModal()}${accessRequestModal()}${onboardingModal()}
+      <div id="toast-region" class="toast-region" aria-live="polite"></div>${deleteAccountModal()}${betaFeedbackModal()}${accessRequestModal()}${onboardingModal()}
     </div>`);
   attachGlobalEvents();
 }
@@ -1492,6 +1501,10 @@ function workspacePage() {
               <button class="button button-secondary" type="button" data-route="brand">${icon("message", 16)} Manage Brand Voice</button>
             </section>
           </form>
+          <section class="form-card workspace-danger">
+            ${sectionEyebrow("03", "ACCOUNT", "Permanent actions need your password and a typed confirmation.")}
+            <div class="danger-zone-row"><div><strong>Delete my account</strong><p>Permanently removes your sign-in, this workspace, brand context, and ${state.strategies.length} saved ${state.strategies.length === 1 ? 'strategy' : 'strategies'} from MarketMind's cloud, plus the local copy on this device.</p></div><button class="button button-danger" type="button" data-action="open-delete-account">Delete my account</button></div>
+          </section>
         </main>
         <aside class="workspace-aside"><div class="aside-card workspace-principle"><div class="aside-mark">${icon("settings", 18)}</div><div class="eyebrow">A QUIETER WORKSPACE</div><h3>Set once.<br>Think further.</h3><p>Workspace defaults guide new briefs. They never override a specific strategy you enter.</p></div><div class="aside-card workspace-status"><div class="eyebrow">YOUR WORKSPACE</div><div><span>Strategies saved</span><strong>${state.strategies.length}</strong></div><div><span>Brand context</span><strong>${brand.name || brand.description ? "Ready" : "To set up"}</strong></div></div></aside>
       </div>
@@ -2105,6 +2118,7 @@ function render() {
   if (state.page === 'campaigns') attachCampaignEvents();
   if (state.page === 'brand') attachBrandEvents();
   if (state.page === 'workspace') attachWorkspaceEvents();
+  attachDeleteAccountEvents();
 }
 
 function navigate(page) {
@@ -2330,6 +2344,89 @@ function persistWorkspace() {
   if (!storage.isCurrent(account)) return;
   const localSaved = storage.saveWorkspace(state.workspace);
   if (state.cloud.repository) state.cloud.repository.saveWorkspace({ ...state.workspace, brandProfile: state.brand }).catch(() => { if (storage.isCurrent(account)) showToast(localSaved ? 'Saved on this device only. Cloud sync is unavailable; try saving again when connected.' : 'Changes could not be saved. Keep this page open and try again.', localSaved ? 'info' : 'error'); });
+}
+
+async function handleDeleteAccountSubmit(form) {
+  const password = form.querySelector('#delete-account-password').value;
+  const confirmText = form.querySelector('#delete-account-confirm').value.trim();
+  if (confirmText !== 'DELETE') {
+    state.deleteAccount.error = 'Type DELETE in capitals to confirm permanent deletion.';
+    render();
+    return;
+  }
+  if (!password) {
+    state.deleteAccount.error = 'Enter your password to confirm account deletion.';
+    render();
+    return;
+  }
+  const userId = state.auth.user?.id;
+  if (!userId || state.cloud.repository?.workspaceId !== userId) {
+    state.deleteAccount.error = 'Your session changed. Sign in again before deleting your account.';
+    render();
+    return;
+  }
+  state.deleteAccount.working = true;
+  state.deleteAccount.error = null;
+  render();
+  try {
+    // Order matters: prove identity, then remove cloud data, then the auth
+    // record (after which Firestore deletes could no longer be authorized),
+    // then this device's local copy. Every step is safe to retry.
+    await authService.reauthenticate(password);
+  } catch (error) {
+    state.deleteAccount.working = false;
+    state.deleteAccount.error = /wrong-password|invalid-credential/.test(String(error?.code || ''))
+      ? 'That password did not match this account. Nothing was deleted.'
+      : authErrorMessage(error);
+    render();
+    return;
+  }
+  try {
+    await state.cloud.repository.deleteAccountData();
+  } catch (error) {
+    state.deleteAccount.working = false;
+    const stage = error?.deletionStage === 'workspace' ? 'the workspace record' : 'your saved strategies';
+    state.deleteAccount.error = `Deleting ${stage} failed partway (${error?.strategiesDeleted || 0} strategies removed). Your sign-in was not touched - try again to finish the job.`;
+    render();
+    return;
+  }
+  try {
+    await authService.deleteAuthUser();
+  } catch (error) {
+    state.deleteAccount.working = false;
+    state.deleteAccount.error = 'Your workspace data was deleted, but removing the sign-in failed. Try again - the remaining step only removes the sign-in.';
+    render();
+    return;
+  }
+  storage.clearAccountData(userId);
+  state.deleteAccount = { open: false, working: false, error: null };
+  await applyAuthState(null, null);
+  // applyAuthState clears feedback and routes to landing; land on sign-in
+  // instead, where the confirmation is actually rendered.
+  state.auth.feedback = { type: 'success', message: 'Your MarketMind account and all workspace data were permanently deleted.' };
+  state.page = 'sign-in';
+  window.history.replaceState(null, '', '#sign-in');
+  render();
+}
+
+function attachDeleteAccountEvents() {
+  document.querySelector('[data-action="open-delete-account"]')?.addEventListener('click', () => {
+    state.deleteAccount = { open: true, working: false, error: null };
+    render();
+  });
+  document.querySelectorAll('[data-action="close-delete-account"]').forEach((element) => element.addEventListener('click', (event) => {
+    // The overlay closes only on a click on itself; inner dialog clicks bubble
+    // up to it and must not close the dialog (the submit button included).
+    if (element.classList.contains('feedback-overlay') && event.target !== element) return;
+    if (state.deleteAccount.working) return;
+    state.deleteAccount = { open: false, working: false, error: null };
+    render();
+  }));
+  document.querySelector('#delete-account-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (state.deleteAccount.working) return;
+    handleDeleteAccountSubmit(event.currentTarget);
+  });
 }
 
 function attachWorkspaceEvents() {

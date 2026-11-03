@@ -1950,3 +1950,13 @@ html { color-scheme: dark; }
   .onboarding-nav { flex-wrap: wrap; }
   .onboarding-nav .button { margin-left: 0; flex: 1; justify-content: center; }
 }
+
+/* Account deletion (workspace danger zone + dialog) */
+.workspace-danger { margin-top: 24px; border-color: rgba(180, 60, 50, 0.35); }
+.danger-zone-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.danger-zone-row p { margin: 6px 0 0; max-width: 52ch; }
+.button-danger { background: #8f2d24; color: #fff; }
+.button-danger:hover { background: #a83a2f; }
+.button-danger:disabled { opacity: 0.6; cursor: wait; }
+.delete-account-list { margin: 4px 0 12px; padding-left: 20px; display: grid; gap: 6px; }
+.delete-account-limits { font-size: 0.9em; opacity: 0.85; }

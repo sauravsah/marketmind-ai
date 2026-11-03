@@ -49,6 +49,20 @@ export function createAccountStorage(getLocalStorage = () => window.localStorage
     },
     getOnboarding() { return read(KEYS.onboarding, null); },
     saveOnboarding(value) { return write(KEYS.onboarding, { version: 1, ...value }); },
+    // Removes every local key belonging to one account. Used only after the
+    // cloud account was deleted; returns how many keys were removed.
+    clearAccountData(userId) {
+      if (!userId) return 0;
+      const prefix = `marketmind.account.${encodeURIComponent(String(userId))}.`;
+      let removed = 0;
+      try {
+        const local = getLocalStorage();
+        for (const name of Object.keys(local)) {
+          if (name.startsWith(prefix)) { local.removeItem(name); removed += 1; }
+        }
+      } catch { /* local storage unavailable - cloud deletion already completed. */ }
+      return removed;
+    },
     getMigrationMarker(userId) { return userId === accountId ? read('migration', null) : null; },
     setMigrationMarker(userId, value = { completedAt: new Date().toISOString() }) { return userId === accountId && write('migration', value); },
   };

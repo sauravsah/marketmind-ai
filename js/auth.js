@@ -288,6 +288,31 @@ export const authService = {
     return { error: null };
   },
 
+  // Re-authenticates right before account deletion: Firebase requires a
+  // recent login for deleteUser, and this also proves the person at the
+  // keyboard knows the account password.
+  async reauthenticate(password) {
+    const firebase = await getClient();
+    if (!firebase) throw unavailableError();
+    const user = firebase.auth.currentUser;
+    if (!user) throw new Error('Sign in again before deleting your account.');
+    const credential = firebase.authApi.EmailAuthProvider.credential(user.email, password);
+    await firebase.authApi.reauthenticateWithCredential(user, credential);
+    return { error: null };
+  },
+
+  // Deletes the Firebase Auth record itself. Always called AFTER cloud data
+  // deletion: once the auth record is gone, Firestore deletes can no longer
+  // be authorized as this user.
+  async deleteAuthUser() {
+    const firebase = await getClient();
+    if (!firebase) throw unavailableError();
+    const user = firebase.auth.currentUser;
+    if (!user) throw new Error('Sign in again before deleting your account.');
+    await firebase.authApi.deleteUser(user);
+    return { error: null };
+  },
+
   async resendVerification(email) {
     const firebase = await getClient();
     if (!firebase) throw unavailableError();
