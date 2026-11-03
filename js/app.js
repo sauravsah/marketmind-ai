@@ -2421,7 +2421,7 @@ async function handleDeleteAccountSubmit(form) {
   await applyAuthState(null, null);
   // applyAuthState clears feedback and routes to landing; land on sign-in
   // instead, where the confirmation is actually rendered.
-  state.auth.feedback = { type: 'success', message: 'Your MarketMind account and cloud workspace data were deleted, and the copy on this device was removed. Any other signed-in devices lose access.' };
+  state.auth.feedback = { type: 'success', message: 'Your MarketMind account and cloud workspace data were deleted, and the copy on this device was removed. Other devices may remain signed in temporarily. Their local copies are not removed by this action.' };
   state.page = 'sign-in';
   window.history.replaceState(null, '', '#sign-in');
   render();
