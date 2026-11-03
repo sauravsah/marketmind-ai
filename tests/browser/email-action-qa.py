@@ -7,7 +7,7 @@ P='/downloads/marketmind'; OUT='/tmp/marketmind-email-qa'; os.makedirs(OUT,exist
 CONFIG=json.dumps({"firebase":{"apiKey":"qa","authDomain":"qa-project.firebaseapp.com","projectId":"qa","storageBucket":"","messagingSenderId":"","appId":"qa"}})
 APP_STUB="export const getApps=()=>[];export const getApp=()=>({options:{}});export const initializeApp=(c)=>({options:c});"
 AUTH_STUB='''
-const params=new URLSearchParams(location.search);
+const params=new URLSearchParams(location.search);window.__qaParams=location.search;
 const state=params.get('qa_auth_state')||'out';
 const result=params.get('qa_action_result')||'ok';
 const user=state==='out'?null:{uid:'qa',id:'qa',email:'qa@example.invalid',emailVerified:false,displayName:'',metadata:{}};
@@ -80,6 +80,15 @@ try:
   page.goto('http://localhost:4188/?mode=recoverEmail&oobCode=REC123&apiKey=qa')
   page.wait_for_timeout(3000)
   checks['recover_forwarded']=any(u.startswith('https://qa-project.firebaseapp.com/__/auth/action') and 'mode=recoverEmail' in u and 'oobCode=REC123' in u for u in forwarded)
+
+  # 4b. Token hygiene: action params left the live URL before analytics could
+  # send a pageview, and the stash held them for the app.
+  page.goto('http://localhost:4188/?mode=verifyEmail&oobCode=SECRET123&qa_auth_state=out&qa_action_result=ok')
+  page.wait_for_timeout(2500)
+  checks['url_stripped_of_token']='oobCode' not in page.url and 'SECRET123' not in page.url
+  checks['qa_params_survive_strip']='qa_auth_state=out' in (page.evaluate('window.__qaParams') or '')
+  stash=page.evaluate('sessionStorage.getItem("marketmind.email-action")')
+  checks['stash_cleared_after_handling']=stash is None
 
   # 5. Unknown future mode: also forwarded untouched.
   forwarded.clear()

@@ -4,6 +4,27 @@
 <!-- Analytics (GA + self-hosted Umami, aggregate only). Loaded only on the
      live site so local development and automated QA never send telemetry. -->
 <script>
+  // Email action links carry one-time codes in the query. Move the Firebase
+  // parameters out of the URL before anything else loads so they can never
+  // reach analytics pageviews, referrers, or third-party requests. js/auth.js
+  // reads them back from sessionStorage. Non-Firebase params stay in place.
+  (function () {
+    if (!location.search) return;
+    var FIREBASE_PARAMS = ['mode', 'oobCode', 'apiKey', 'lang', 'continueUrl'];
+    var params = new URLSearchParams(location.search);
+    var stashed = new URLSearchParams();
+    var moved = false;
+    FIREBASE_PARAMS.forEach(function (name) {
+      var value = params.get(name);
+      if (value !== null) { stashed.set(name, value); params.delete(name); moved = true; }
+    });
+    if (!moved) return;
+    try { sessionStorage.setItem('marketmind.email-action', stashed.toString()); } catch (e) { return; }
+    var rest = params.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+  })();
+</script>
+<script>
   (function () {
     var host = location.hostname;
     if (host !== 'marketmind-ai-five.vercel.app') return;

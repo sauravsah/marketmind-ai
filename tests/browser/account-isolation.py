@@ -19,6 +19,7 @@ const api={doc:(p,...s)=>({path:(p.path||'db')+'/'+s.join('/')}),collection:(p,.
  setDoc:async(r,d)=>{if(delayWrites){delayWrites=false;await new Promise(ok=>releaseWrite=ok);}docs.set(r.path,clone(d));}};
 window.qa={switchUser:async name=>{current=users[name]||null;await callback(current?'SIGNED_IN':'SIGNED_OUT',current?{user:current}:null);},delayedSwitch:name=>{delayedOwner=name;window.qa.switchUser(name);},releaseRead:()=>releaseRead?.(),delayWrite:()=>delayWrites=true,releaseWrite:()=>releaseWrite?.(),cloud:()=>Object.fromEntries(docs)};
 export const authService={init:async()=>({configured:true,user:current,session:{user:current}}),getClient:async()=>({db:{},firestoreApi:api}),onAuthStateChange:async fn=>{callback=fn;return {data:{subscription:{unsubscribe(){}}}};},getIdToken:async()=>null,signOut:async()=>{await window.qa.switchUser(null);return {};}};
+export const emailActionParams=()=>new URLSearchParams(location.search);
 export const authErrorMessage=e=>e.message;export const authenticatedFetch=(u,o)=>fetch(u,o);
 '''
 srv=subprocess.Popen(['node','server.mjs'],cwd=ROOT,env={**os.environ,'PORT':'4186'},stdout=subprocess.DEVNULL)

@@ -86,18 +86,33 @@ function toSession(user) {
   return user ? { user: toUser(user), firebaseUser: user } : null;
 }
 
-function actionCodeFromLocation() {
+const EMAIL_ACTION_STASH_KEY = 'marketmind.email-action';
+
+// index.html moves Firebase action parameters (mode, oobCode, ...) into
+// sessionStorage before analytics loads, so tokens never appear in pageview
+// telemetry or referrers. Read the stash first, then fall back to the live
+// URL for older links opened before that strip existed.
+export function emailActionParams() {
+  try {
+    const stashed = sessionStorage.getItem(EMAIL_ACTION_STASH_KEY);
+    if (stashed) return new URLSearchParams(stashed);
+  } catch { /* sessionStorage unavailable - the live URL still has the parameters. */ }
   const search = new URLSearchParams(window.location.search);
   const hash = String(window.location.hash || '');
   const hashQuery = hash.includes('?') ? new URLSearchParams(hash.slice(hash.indexOf('?') + 1)) : null;
-  return search.get('oobCode') || hashQuery?.get('oobCode') || '';
+  return hashQuery ? new URLSearchParams([...search, ...hashQuery]) : search;
+}
+
+function clearEmailActionStash() {
+  try { sessionStorage.removeItem(EMAIL_ACTION_STASH_KEY); } catch { /* sessionStorage unavailable. */ }
+}
+
+function actionCodeFromLocation() {
+  return emailActionParams().get('oobCode') || '';
 }
 
 function actionModeFromLocation() {
-  const search = new URLSearchParams(window.location.search);
-  const hash = String(window.location.hash || '');
-  const hashQuery = hash.includes('?') ? new URLSearchParams(hash.slice(hash.indexOf('?') + 1)) : null;
-  return search.get('mode') || hashQuery?.get('mode') || '';
+  return emailActionParams().get('mode') || '';
 }
 
 function resetRedirectUrl() {
@@ -105,6 +120,7 @@ function resetRedirectUrl() {
 }
 
 function clearActionQuery() {
+  clearEmailActionStash();
   const cleanHash = String(window.location.hash || '').split('?')[0];
   window.history.replaceState(null, '', `${window.location.pathname}${cleanHash}`);
 }
@@ -183,9 +199,12 @@ export const authService = {
         // verifyAndChangeEmail, or anything newer): hand the untouched link
         // to Firebase's default hosted handler so it completes exactly as it
         // does today, instead of silently doing nothing with the oobCode.
+        // The live query was already stripped for token hygiene, so rebuild
+        // the forwarded query from the same source init() used (stash-aware).
         const config = await loadRuntime();
-        const target = defaultActionHandlerUrl(config?.firebase?.authDomain, window.location.search);
+        const target = defaultActionHandlerUrl(config?.firebase?.authDomain, `?${emailActionParams().toString()}`);
         if (target) {
+          clearEmailActionStash();
           window.location.replace(target);
           return { configured: true, session: null, user: null, actionForwarding: true };
         }
@@ -202,6 +221,7 @@ export const authService = {
           // offer the right recovery instead of failing silently.
           actionError = { mode: actionMode, code: error?.code || 'unknown' };
         }
+        clearEmailActionStash();
       }
       const currentUser = await waitForInitialUser(firebase.auth, firebase.authApi.onAuthStateChanged);
       if (currentUser && actionMode === 'verifyEmail' && actionCode) {

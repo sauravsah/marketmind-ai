@@ -7,6 +7,7 @@ const user={id:'isolated-local-qa',uid:'isolated-local-qa',email:'qa@example.inv
 const read=()=>JSON.parse(localStorage.getItem('qa.mock-cloud')||'{}');
 const api={doc:(p,...s)=>({path:(p.path||'db')+'/'+s.join('/')}),collection:(p,...s)=>({path:(p.path||'db')+'/'+s.join('/')}),getDoc:async r=>({exists:()=>!!read()[r.path],data:()=>read()[r.path]}),getDocs:async r=>({docs:Object.entries(read()).filter(([k])=>k.startsWith(r.path+'/')).map(([,v])=>({data:()=>v}))}),setDoc:async(r,d)=>{if(localStorage.getItem('qa.fail-cloud'))throw Error('Simulated offline');const docs=read();docs[r.path]=d;localStorage.setItem('qa.mock-cloud',JSON.stringify(docs));}};
 export const authService={init:async()=>({configured:true,user,session:{user}}),getClient:async()=>({db:{},firestoreApi:api}),onAuthStateChange:async()=>({data:{subscription:{unsubscribe(){}}}}),getIdToken:async()=>null,signOut:async()=>({})};
+export const emailActionParams=()=>new URLSearchParams(location.search);
 export const authErrorMessage=e=>e.message;export const authenticatedFetch=(i,o)=>fetch(i,o);
 '''
 srv=subprocess.Popen(['node','server.mjs'],cwd=P,env={**os.environ,'PORT':'4185'},stdout=subprocess.DEVNULL)

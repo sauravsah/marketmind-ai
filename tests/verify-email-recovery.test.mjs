@@ -75,3 +75,16 @@ test('signed-in copy keeps the watcher promise and resend guidance', () => {
   assert.match(copy.body, /keeps checking/i);
   assert.match(copy.body, /fresh link below/i);
 });
+
+// The forward destination is always the project's own authDomain handler.
+// Nothing in the forwarded query (continueUrl or anything else) can steer
+// the browser to a different host.
+test('the forward target is pinned to the project authDomain, never to query content', () => {
+  const target = defaultActionHandlerUrl(
+    'example.firebaseapp.com',
+    '?mode=recoverEmail&oobCode=ABC&continueUrl=https%3A%2F%2Fevil.example%2Fsteal'
+  );
+  assert.ok(target.startsWith('https://example.firebaseapp.com/__/auth/action?'));
+  assert.match(target, /continueUrl=/); // passed through for the default handler, as today
+  assert.equal(new URL(target).host, 'example.firebaseapp.com');
+});

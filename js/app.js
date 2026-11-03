@@ -20,7 +20,7 @@ import { assessIntelligence, campaignFreshness, journeyStageReview, researchIsSt
 import { applyCampaignOverrides, campaignSectionHasContent, regenerateConfirmCopy } from './client/campaign.js';
 import { storage } from './storage.js';
 import { collectStrategyBrief } from './strategy-brief.js';
-import { authService, authErrorMessage, authenticatedFetch, describeEmailActionError } from './auth.js';
+import { authService, authErrorMessage, authenticatedFetch, describeEmailActionError, emailActionParams } from './auth.js';
 import { createWorkspaceRepository, summarizeMigration } from './repository.js';
 import { decideAuthRoute, isProtectedRoute, isVerifiedUser, routeFromHash as mapHashRoute, PUBLIC_ROUTES } from './auth-routes.js';
 import {
@@ -55,7 +55,9 @@ import {
 } from './audience-review.js';
 
 function routeFromHash() {
-  const queryMode = new URLSearchParams(window.location.search).get('mode');
+  // The live query has already been stripped of Firebase action parameters
+  // for token hygiene; emailActionParams() checks the sessionStorage stash.
+  const queryMode = emailActionParams().get('mode');
   if (queryMode === 'resetPassword') return 'reset-password';
   if (queryMode === 'verifyEmail') return 'verify-email';
   return mapHashRoute(window.location.hash);

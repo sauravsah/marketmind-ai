@@ -9,6 +9,7 @@ const params=new URLSearchParams(location.search);
 const verified=params.get('qa_verified')!=='0';
 const user={id:'onboarding-qa',uid:'onboarding-qa',email:'qa@example.invalid',emailVerified:verified};
 export const authService={init:async()=>({configured:true,user,session:{user}}),getClient:async()=>({db:{},firestoreApi:api}),onAuthStateChange:async()=>({data:{subscription:{unsubscribe(){}}}}),getIdToken:async()=>null,signOut:async()=>({})};
+export const emailActionParams=()=>new URLSearchParams(location.search);
 export const authErrorMessage=e=>e.message;export const authenticatedFetch=(i,o)=>fetch(i,o);
 export const describeEmailActionError=code=>({title:'That verification link did not work.',body:'The link may have expired, or it was already used. If you opened it before, your email may already be verified - this page keeps checking automatically and opens the workspace the moment you are. If nothing happens within a minute, send a fresh link below and open the newest email.'});
 '''
