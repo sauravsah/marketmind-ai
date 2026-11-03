@@ -306,7 +306,7 @@ function deleteAccountModal() {
   const dialog = state.deleteAccount;
   if (!dialog.open) return '';
   const strategyCount = state.strategies.length;
-  return `<div class="feedback-overlay" data-action="close-delete-account"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title" data-delete-account-dialog><button class="modal-close" type="button" aria-label="Cancel account deletion" data-action="close-delete-account">${icon('close', 17)}</button><div class="eyebrow">PERMANENT DELETION</div><h2 id="delete-account-title">Delete your<br><em>account?</em></h2><p>This permanently deletes:</p><ul class="delete-account-list"><li>Your MarketMind sign-in (${escapeHtml(state.auth.user?.email || 'this email')})</li><li>Your workspace, brand context, and ${strategyCount} saved ${strategyCount === 1 ? 'strategy' : 'strategies'} from the cloud</li><li>The local copy stored on this device</li></ul><p class="delete-account-limits">Already-collected server logs and anonymized analytics cannot be removed. This cannot be undone.</p>${dialog.error ? `<div class="form-feedback error" role="alert">${escapeHtml(dialog.error)}</div>` : ''}<form id="delete-account-form" class="auth-form" novalidate><div class="field"><label for="delete-account-password">Your password</label><input id="delete-account-password" name="password" type="password" autocomplete="current-password" required placeholder="Confirms it is really you"></div><div class="field"><label for="delete-account-confirm">Type DELETE to confirm</label><input id="delete-account-confirm" name="confirm" type="text" autocomplete="off" required placeholder="DELETE"></div><button class="button button-danger button-wide" type="submit" ${dialog.working ? 'disabled' : ''}>${dialog.working ? 'Deleting…' : 'Permanently delete my account'}</button></form><button class="text-button centered" type="button" data-action="close-delete-account">Cancel - keep my account</button></section></div>`;
+  return `<div class="feedback-overlay" data-action="close-delete-account"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title" data-delete-account-dialog><button class="modal-close" type="button" aria-label="Cancel account deletion" data-action="close-delete-account">${icon('close', 17)}</button><div class="eyebrow">PERMANENT DELETION</div><h2 id="delete-account-title">Delete your<br><em>account?</em></h2><p>This removes from your account and workspace:</p><ul class="delete-account-list"><li>Your MarketMind sign-in (${escapeHtml(state.auth.user?.email || 'this email')})</li><li>Your workspace, brand context, and ${strategyCount} saved ${strategyCount === 1 ? 'strategy' : 'strategies'} from the cloud</li><li>The local copy stored on this device</li></ul><p class="delete-account-limits">Already-collected server logs and aggregate analytics cannot be removed from here. The provider's backups may retain deleted data for a limited window before it is purged. This cannot be undone.</p>${dialog.error ? `<div class="form-feedback error" role="alert">${escapeHtml(dialog.error)}</div>` : ''}<form id="delete-account-form" class="auth-form" novalidate><div class="field"><label for="delete-account-password">Your password</label><input id="delete-account-password" name="password" type="password" autocomplete="current-password" required placeholder="Confirms it is really you"></div><div class="field"><label for="delete-account-confirm">Type DELETE to confirm</label><input id="delete-account-confirm" name="confirm" type="text" autocomplete="off" required placeholder="DELETE"></div><button class="button button-danger button-wide" type="submit" ${dialog.working ? 'disabled' : ''}>${dialog.working ? 'Deleting…' : 'Permanently delete my account'}</button></form><button class="text-button centered" type="button" data-action="close-delete-account">Cancel - keep my account</button></section></div>`;
 }
 
 function betaFeedbackModal() {
@@ -1503,7 +1503,7 @@ function workspacePage() {
           </form>
           <section class="form-card workspace-danger">
             ${sectionEyebrow("03", "ACCOUNT", "Permanent actions need your password and a typed confirmation.")}
-            <div class="danger-zone-row"><div><strong>Delete my account</strong><p>Permanently removes your sign-in, this workspace, brand context, and ${state.strategies.length} saved ${state.strategies.length === 1 ? 'strategy' : 'strategies'} from MarketMind's cloud, plus the local copy on this device.</p></div><button class="button button-danger" type="button" data-action="open-delete-account">Delete my account</button></div>
+            <div class="danger-zone-row"><div><strong>Delete my account</strong><p>Deletes your sign-in, this workspace, brand context, and ${state.strategies.length} saved ${state.strategies.length === 1 ? 'strategy' : 'strategies'} from MarketMind's cloud, plus the local copy on this device.</p></div><button class="button button-danger" type="button" data-action="open-delete-account">Delete my account</button></div>
           </section>
         </main>
         <aside class="workspace-aside"><div class="aside-card workspace-principle"><div class="aside-mark">${icon("settings", 18)}</div><div class="eyebrow">A QUIETER WORKSPACE</div><h3>Set once.<br>Think further.</h3><p>Workspace defaults guide new briefs. They never override a specific strategy you enter.</p></div><div class="aside-card workspace-status"><div class="eyebrow">YOUR WORKSPACE</div><div><span>Strategies saved</span><strong>${state.strategies.length}</strong></div><div><span>Brand context</span><strong>${brand.name || brand.description ? "Ready" : "To set up"}</strong></div></div></aside>
@@ -2390,6 +2390,12 @@ async function handleDeleteAccountSubmit(form) {
     render();
     return;
   }
+  if (state.auth.user?.id !== userId) {
+    state.deleteAccount.working = false;
+    state.deleteAccount.error = 'The signed-in account changed during deletion. Cloud data for the original account was removed; sign in again to finish removing its sign-in.';
+    render();
+    return;
+  }
   try {
     await authService.deleteAuthUser();
   } catch (error) {
@@ -2403,7 +2409,7 @@ async function handleDeleteAccountSubmit(form) {
   await applyAuthState(null, null);
   // applyAuthState clears feedback and routes to landing; land on sign-in
   // instead, where the confirmation is actually rendered.
-  state.auth.feedback = { type: 'success', message: 'Your MarketMind account and all workspace data were permanently deleted.' };
+  state.auth.feedback = { type: 'success', message: 'Your MarketMind account and workspace data were deleted.' };
   state.page = 'sign-in';
   window.history.replaceState(null, '', '#sign-in');
   render();

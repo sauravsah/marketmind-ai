@@ -112,3 +112,12 @@ test('local cleanup without a user id removes nothing', () => {
   assert.equal(store.clearAccountData(null), 0);
   assert.equal(store.clearAccountData(''), 0);
 });
+
+test('saves are blocked while account deletion is in progress', async () => {
+  const firestore = makeFirestore();
+  const repository = makeRepository(firestore);
+  const deletion = repository.deleteAccountData();
+  await assert.rejects(repository.saveWorkspace({ workspaceName: 'sneaky' }), /deletion is in progress/i);
+  await assert.rejects(repository.saveStrategy({ id: 's9' }), /deletion is in progress/i);
+  await deletion;
+});

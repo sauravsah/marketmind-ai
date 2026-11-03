@@ -83,14 +83,38 @@ try:
   page.locator('#delete-account-password').fill('correct-password')
   page.locator('#delete-account-confirm').fill('DELETE')
   page.get_by_role('button',name='Permanently delete my account',exact=True).click()
-  page.get_by_text('permanently deleted',exact=False).wait_for(timeout=8000)
+  page.get_by_text('were deleted.',exact=False).wait_for(timeout=8000)
   calls=page.evaluate('window.__calls')
   checks['deletion_order']=calls==['reauthenticate','reauthenticate','deleteDoc:db/users/qa-delete/strategies/s1','deleteDoc:db/users/qa-delete/strategies/s2','deleteDoc:db/users/qa-delete','deleteUser']
   checks['local_copy_removed']=page.evaluate("Object.keys(localStorage).filter(k=>k.includes('qa-delete')).length")==0
-  checks['signed_out_confirmation']=page.locator('body').inner_text().find('permanently deleted')>=0
+  checks['signed_out_confirmation']=page.locator('body').inner_text().find('were deleted.')>=0
   page.screenshot(path=f'{OUT}/delete-done-1280.png')
   checks['no_page_errors']=not errors
   checks['no_analytics']=not external
+
+  # Mobile 390: dialog fits without horizontal overflow, wrong-password tall
+  # state keeps the confirm field and delete button reachable.
+  m=b.new_page(viewport={'width':390,'height':844},reduced_motion='reduce')
+  m.route('**/*',lambda r:r.abort() if '/api/' in r.request.url or 'analytics' in r.request.url or 'googletagmanager' in r.request.url else r.continue_())
+  m.route('**/api/public-runtime-config',lambda r:r.fulfill(status=200,content_type='application/json',body=CONFIG))
+  m.route('**/firebasejs/**/firebase-app.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=APP_STUB))
+  m.route('**/firebasejs/**/firebase-auth.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=AUTH_STUB))
+  m.route('**/firebasejs/**/firebase-firestore.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=FS_STUB))
+  m.goto('http://localhost:4190/#workspace')
+  m.get_by_role('heading',name='Set the context',exact=False).wait_for(timeout=10000)
+  m.get_by_role('button',name='Delete my account',exact=True).click()
+  m.get_by_role('heading',name='Delete your',exact=False).wait_for()
+  checks['mobile_dialog_no_hoverflow']=m.evaluate('document.documentElement.scrollWidth<=391')
+  m.locator('#delete-account-password').fill('wrong-password')
+  m.locator('#delete-account-confirm').fill('DELETE')
+  m.get_by_role('button',name='Permanently delete my account',exact=True).click()
+  m.get_by_text('did not match',exact=False).wait_for(timeout=8000)
+  btn=m.get_by_role('button',name='Permanently delete my account',exact=True)
+  btn.scroll_into_view_if_needed()
+  checks['mobile_confirm_button_reachable']=btn.is_visible()
+  checks['mobile_error_visible']=m.get_by_text('Nothing was deleted.',exact=False).is_visible()
+  m.screenshot(path=f'{OUT}/delete-dialog-wrong-password-390.png',full_page=True)
+  m.close()
   b.close()
 finally:
  srv.terminate()

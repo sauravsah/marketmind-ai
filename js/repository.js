@@ -83,6 +83,13 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   if (!client || !userId) throw new Error('A signed-in Firebase client is required.');
   const { db, api } = getFirestoreClient(client);
   let workspaceId = userId;
+  let deleting = false;
+
+  // While account deletion runs, no save from an autosave, listener, or stale
+  // UI path may recreate documents that were just removed.
+  function assertWritable() {
+    if (deleting) throw new Error('Account deletion is in progress. Saving is paused until it completes.');
+  }
 
   function assertCurrent() {
     if (!isCurrent()) throw new Error('The workspace account changed. Reopen the current workspace before saving.');
@@ -120,6 +127,7 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   }
 
   async function requestBetaAccess(email) {
+    assertWritable();
     assertCurrent();
     const normalized = String(email || '').trim().toLowerCase();
     if (!normalized) throw new Error('Your account email is not available yet. Try again in a moment.');
@@ -131,6 +139,7 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   }
 
   async function saveWorkspace(workspace) {
+    assertWritable();
     assertCurrent();
     const payload = serializeWorkspaceDocument(workspace, userId);
     await api.setDoc(workspaceRef(), { ...payload, updatedAt: new Date().toISOString() }, { merge: true });
@@ -148,6 +157,7 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   }
 
   async function saveStrategy(strategy) {
+    assertWritable();
     assertCurrent();
     if (!strategy?.id) throw new Error('A strategy id is required.');
     const reference = api.doc(strategyCollectionRef(), strategyDocumentId(strategy.id));
@@ -156,6 +166,7 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   }
 
   async function migrateLocalData() {
+    assertWritable();
     assertCurrent();
     const snapshot = local.getLocalSnapshot();
     const remoteWorkspace = (await getWorkspace()) || {};
@@ -181,6 +192,7 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   // partial failure can be retried safely, and the caller learns how far
   // it got from the thrown step marker.
   async function deleteAccountData() {
+    deleting = true;
     assertCurrent();
     const snapshot = await api.getDocs(strategyCollectionRef());
     assertCurrent();
