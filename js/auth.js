@@ -120,24 +120,52 @@ async function waitForInitialUser(auth, onAuthStateChanged) {
 }
 
 
+
+// The Firebase console's single "customize action URL" applies to every auth
+// email template, so every mode that can arrive on this origin needs a safe
+// path - not only the ones the product sends today (console, Admin SDK and
+// future SDK flows can issue others). Modes the app implements are completed
+// in-app; everything else is forwarded untouched to the project's default
+// hosted handler, which stays live at the authDomain and completes them
+// exactly as it does today. Unknown modes are never consumed silently.
+export function emailActionRoute(mode) {
+  if (mode === 'verifyEmail') return 'verify-in-app';
+  if (mode === 'resetPassword') return 'reset-in-app';
+  return 'forward-to-default-handler';
+}
+
+export function defaultActionHandlerUrl(authDomain, search) {
+  const domain = String(authDomain || '').trim();
+  if (!domain) return '';
+  return `https://${domain}/__/auth/action${search || ''}`;
+}
+
 // User-facing copy for a failed email-verification link. Firebase shows the
 // same page for a consumed and an expired link, so the distinction here comes
 // from the error code when the app itself handles the action link.
-export function describeEmailActionError(code) {
+export function describeEmailActionError(code, { signedIn = true } = {}) {
   // Firebase surfaces auth/invalid-action-code for links that were already
   // used, are malformed, or have expired - and auth/expired-action-code for
   // expired ones. In practice a used-then-reopened link and an expired link
   // are easy to confuse, so the copy keeps both possibilities open instead
   // of claiming one cause with certainty.
+  // The "this page keeps checking" promise is only made when this browser
+  // holds an unverified session; in a signed-out browser (for example the
+  // mail app's own window) nothing is watching, so the copy routes the
+  // person through sign-in instead.
   if (code === 'auth/expired-action-code' || code === 'auth/invalid-action-code') {
     return {
       title: 'That verification link did not work.',
-      body: 'The link may have expired, or it was already used. If you opened it before, your email may already be verified - this page keeps checking automatically and opens the workspace the moment you are. If nothing happens within a minute, send a fresh link below and open the newest email.',
+      body: signedIn
+        ? 'The link may have expired, or it was already used. If you opened it before, your email may already be verified - this page keeps checking automatically and opens the workspace the moment you are. If nothing happens within a minute, send a fresh link below and open the newest email.'
+        : 'The link may have expired, or it was already used. If you opened it before, your email may already be verified. Sign in to check your status - if you still need verification you can send a fresh link there, then open the newest email.',
     };
   }
   return {
     title: 'That verification link did not work.',
-    body: 'Send yourself a fresh link below and open the newest email.',
+    body: signedIn
+      ? 'Send yourself a fresh link below and open the newest email.'
+      : 'Sign in and send yourself a fresh link, then open the newest email.',
   };
 }
 
@@ -149,9 +177,25 @@ export const authService = {
       const actionMode = actionModeFromLocation();
       const actionCode = actionCodeFromLocation();
       let actionError = null;
-      if (actionMode === 'verifyEmail' && actionCode) {
+      let actionSuccess = null;
+      if (actionMode && actionCode && emailActionRoute(actionMode) === 'forward-to-default-handler') {
+        // A mode this app does not complete itself (recoverEmail,
+        // verifyAndChangeEmail, or anything newer): hand the untouched link
+        // to Firebase's default hosted handler so it completes exactly as it
+        // does today, instead of silently doing nothing with the oobCode.
+        const config = await loadRuntime();
+        const target = defaultActionHandlerUrl(config?.firebase?.authDomain, window.location.search);
+        if (target) {
+          window.location.replace(target);
+          return { configured: true, session: null, user: null, actionForwarding: true };
+        }
+        actionError = { mode: actionMode, code: 'auth/unhandled-action-mode' };
+      } else if (actionMode === 'verifyEmail' && actionCode) {
         try {
           await firebase.authApi.applyActionCode(firebase.auth, actionCode);
+          // Remembered so the verify screen can confirm the link worked even
+          // when this browser is signed out and cannot open the workspace.
+          actionSuccess = { mode: actionMode };
           clearActionQuery();
         } catch (error) {
           // Kept so the verify screen can say what happened to the link and
@@ -163,7 +207,7 @@ export const authService = {
       if (currentUser && actionMode === 'verifyEmail' && actionCode) {
         try { await firebase.authApi.reload(currentUser); } catch { /* A later auth refresh can retry the profile update. */ }
       }
-      return { configured: true, session: toSession(currentUser), user: toUser(currentUser), actionError };
+      return { configured: true, session: toSession(currentUser), user: toUser(currentUser), actionError, actionSuccess };
     } catch (error) {
       return { configured: false, session: null, user: null, error };
     }

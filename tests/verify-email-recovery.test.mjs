@@ -26,3 +26,52 @@ test('unknown link failures get a generic recovery', () => {
   const fallback = describeEmailActionError(undefined);
   assert.equal(fallback.title, copy.title);
 });
+
+import { emailActionRoute, defaultActionHandlerUrl } from '../js/auth.js';
+
+// The console action URL is shared across every auth email template, so the
+// modes the app completes itself are explicit and everything else is sent,
+// untouched, to Firebase's default hosted handler.
+test('verifyEmail and resetPassword are completed in-app', () => {
+  assert.equal(emailActionRoute('verifyEmail'), 'verify-in-app');
+  assert.equal(emailActionRoute('resetPassword'), 'reset-in-app');
+});
+
+test('recoverEmail and any other or unknown mode forward to the default handler', () => {
+  assert.equal(emailActionRoute('recoverEmail'), 'forward-to-default-handler');
+  assert.equal(emailActionRoute('verifyAndChangeEmail'), 'forward-to-default-handler');
+  assert.equal(emailActionRoute('revertSecondFactorAddition'), 'forward-to-default-handler');
+  assert.equal(emailActionRoute('something-future'), 'forward-to-default-handler');
+  assert.equal(emailActionRoute(''), 'forward-to-default-handler');
+});
+
+test('the default handler URL keeps the original query and requires an authDomain', () => {
+  assert.equal(
+    defaultActionHandlerUrl('example.firebaseapp.com', '?mode=recoverEmail&oobCode=ABC'),
+    'https://example.firebaseapp.com/__/auth/action?mode=recoverEmail&oobCode=ABC'
+  );
+  assert.equal(defaultActionHandlerUrl('', '?mode=recoverEmail'), '');
+  assert.equal(defaultActionHandlerUrl(undefined, '?mode=recoverEmail'), '');
+});
+
+// Signed-out browsers (the mail app's own window) have no session watching,
+// so the copy must not promise an automatic check or offer a resend the app
+// cannot perform there.
+test('signed-out recovery copy routes through sign-in instead of the watcher', () => {
+  for (const code of ['auth/expired-action-code', 'auth/invalid-action-code']) {
+    const copy = describeEmailActionError(code, { signedIn: false });
+    assert.doesNotMatch(copy.body, /keeps checking/i);
+    assert.match(copy.body, /sign in/i);
+    assert.match(copy.body, /already used/i);
+    assert.match(copy.body, /expired/i);
+  }
+  const generic = describeEmailActionError('auth/unknown', { signedIn: false });
+  assert.doesNotMatch(generic.body, /keeps checking/i);
+  assert.match(generic.body, /sign in/i);
+});
+
+test('signed-in copy keeps the watcher promise and resend guidance', () => {
+  const copy = describeEmailActionError('auth/invalid-action-code', { signedIn: true });
+  assert.match(copy.body, /keeps checking/i);
+  assert.match(copy.body, /fresh link below/i);
+});

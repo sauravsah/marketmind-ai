@@ -275,8 +275,20 @@ function authPage(route) {
   const configNotice = state.auth.configured === false ? `<div class="config-notice" role="status">${icon('settings', 15)} <span>Authentication is not connected yet. Add the Firebase web configuration to the server environment to activate accounts.</span></div>` : '';
   let content = '';
   if (isVerify) {
-    const actionCopy = state.auth.actionError ? describeEmailActionError(state.auth.actionError.code) : null;
-    content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ONE SMALL STEP</div><h1>Check your<br><em>inbox.</em></h1><p>We sent a verification link${email ? ` to <strong>${escapeHtml(email)}</strong>` : ''}. Verify your email before opening the workspace. Email delivery can take a few minutes; if it doesn't arrive, check your Spam folder. This page keeps checking in the background and opens the workspace the moment you're verified.</p>${actionCopy ? `<div class="form-feedback error" role="alert"><strong>${escapeHtml(actionCopy.title)}</strong> ${escapeHtml(actionCopy.body)}</div>` : `<p class="verify-recovery-hint">Opened your link and landed on an error page instead? If it said the link was already used, you may already be verified - this page keeps checking automatically. If nothing happens within a minute, send a fresh link below and open the newest email.</p>`}${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-auth-action="resend">Resend verification email ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
+    // The mail app's browser may hold no session at all, so every state here
+    // must be honest about what this page can do: the background watcher and
+    // the resend button only work while this browser is signed in and
+    // unverified. Signed-out visitors get sign-in routed copy instead.
+    const signedInUnverified = state.auth.status === 'signed-in-unverified';
+    const actionCopy = state.auth.actionError ? describeEmailActionError(state.auth.actionError.code, { signedIn: signedInUnverified }) : null;
+    const justVerified = state.auth.actionSuccess?.mode === 'verifyEmail';
+    if (justVerified) {
+      content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ALL SET</div><h1>You're<br><em>verified.</em></h1><p>Your email address is confirmed.${signedInUnverified ? ' Your workspace opens now.' : ' Sign in to open your workspace.'}</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-route="sign-in">${signedInUnverified ? 'Continue' : 'Sign in'} ${icon('arrow', 16)}</button></div>`;
+    } else if (signedInUnverified) {
+      content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ONE SMALL STEP</div><h1>Check your<br><em>inbox.</em></h1><p>We sent a verification link${email ? ` to <strong>${escapeHtml(email)}</strong>` : ''}. Verify your email before opening the workspace. Email delivery can take a few minutes; if it doesn't arrive, check your Spam folder. This page keeps checking in the background and opens the workspace the moment you're verified.</p>${actionCopy ? `<div class="form-feedback error" role="alert"><strong>${escapeHtml(actionCopy.title)}</strong> ${escapeHtml(actionCopy.body)}</div>` : `<p class="verify-recovery-hint">Opened your link and landed on an error page instead? If it said the link was already used, you may already be verified - this page keeps checking automatically. If nothing happens within a minute, send a fresh link below and open the newest email.</p>`}${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-auth-action="resend">Resend verification email ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
+    } else {
+      content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">EMAIL VERIFICATION</div><h1>Check your<br><em>status.</em></h1><p>A verification link is sent when an account is created. Sign in and MarketMind checks your verification status automatically - and lets you send a fresh link if you still need one.</p>${actionCopy ? `<div class="form-feedback error" role="alert"><strong>${escapeHtml(actionCopy.title)}</strong> ${escapeHtml(actionCopy.body)}</div>` : ''}${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-route="sign-in">Sign in ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="landing">Back to home</button></div>`;
+    }
   } else if (isForgot) {
     content = `<div class="auth-form-card"><div class="eyebrow">ACCOUNT RECOVERY</div><h1>Reset your<br><em>password.</em></h1><p>Enter your email and we’ll send a secure reset link.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="alert">${escapeHtml(feedback.message)}</div>` : ''}<form id="forgot-form" class="auth-form" novalidate><div class="field"><label for="auth-email">Email address</label><input id="auth-email" name="email" type="email" autocomplete="email" required value="${escapeHtml(email)}" placeholder="you@company.com"></div><button class="button button-primary button-wide" type="submit">Send reset link ${icon('arrow', 16)}</button></form><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
   } else if (isReset) {
@@ -517,6 +529,7 @@ async function applyAuthState(session, user = session?.user || null) {
   }
   state.auth.status = 'signed-in';
   state.auth.actionError = null;
+  state.auth.actionSuccess = null;
   await loadCloudWorkspace();
 }
 
@@ -2411,9 +2424,16 @@ async function bootstrap() {
   }
   render();
   const initial = await authService.init();
+  if (initial.actionForwarding) {
+    // The browser is being forwarded to Firebase's default action handler to
+    // complete an email action this app does not handle itself. Keep the
+    // loading page until navigation takes over.
+    return;
+  }
   state.auth.configured = initial.configured;
   state.auth.error = initial.error || null;
   state.auth.actionError = initial.actionError || null;
+  state.auth.actionSuccess = initial.actionSuccess || null;
   const subscription = await authService.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') {
       state.auth.session = session;
