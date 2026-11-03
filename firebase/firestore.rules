@@ -6,23 +6,32 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    // Once the owner marks their account for deletion, no client - any tab,
-    // any device, or a stale offline write - can create or update workspace
-    // data again. Reads and deletes stay allowed so cleanup can finish.
-    // The marker is written as the first deletion step and removed with the
-    // workspace document itself.
-    function deletionMarked(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId))
-        && get(/databases/$(database)/documents/users/$(userId)).data.get('deleting', false) == true;
+    // Durable deletion tombstone: written as the first deletion step and
+    // never removable by any client. While it exists, no client - this tab,
+    // other tabs or devices, stale offline writes, or an ID token issued
+    // before the auth record was removed (tokens stay valid for up to an
+    // hour after deletion) - can create or update workspace data again.
+    // exists() handles accounts whose workspace doc is absent or deleted.
+    function accountTombstoned(userId) {
+      return exists(/databases/$(database)/documents/accountTombstones/$(userId));
+    }
+
+    match /accountTombstones/{userId} {
+      // Minimal non-content marker: schema and deletion timestamp only.
+      allow create: if signedInOwner(userId)
+        && request.resource.data.keys().hasOnly(['schema', 'deletedAt'])
+        && request.resource.data.schema == 1
+        && request.resource.data.deletedAt is timestamp;
+      allow read, update, delete: if false;
     }
 
     match /users/{userId} {
       allow read, delete: if signedInOwner(userId);
-      allow create, update: if signedInOwner(userId) && !deletionMarked(userId);
+      allow create, update: if signedInOwner(userId) && !accountTombstoned(userId);
 
       match /strategies/{strategyId} {
         allow read, delete: if signedInOwner(userId);
-        allow create, update: if signedInOwner(userId) && !deletionMarked(userId);
+        allow create, update: if signedInOwner(userId) && !accountTombstoned(userId);
       }
     }
   }

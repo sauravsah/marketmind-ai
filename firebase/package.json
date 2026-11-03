@@ -1,0 +1,13 @@
+{
+  "name": "marketmind-firestore-rules",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-marketmind 'node --test rules.test.mjs'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4",
+    "firebase": "^11",
+    "firebase-tools": "^14"
+  }
+}

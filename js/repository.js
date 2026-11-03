@@ -99,6 +99,10 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
     return api.doc(db, 'users', userId);
   }
 
+  function tombstoneRef() {
+    return api.doc(db, 'accountTombstones', userId);
+  }
+
   function strategyCollectionRef() {
     return api.collection(workspaceRef(), 'strategies');
   }
@@ -186,24 +190,36 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
     return { summary, workspace: savedWorkspace, strategies: [...remoteStrategies, ...imported], imported };
   }
 
-  // Permanently deletes every cloud record owned by this account: all
-  // strategy documents first, then the workspace document itself. Every
-  // step is idempotent - deleting an absent document is a no-op - so a
-  // partial failure can be retried safely, and the caller learns how far
-  // it got from the thrown step marker.
+  function isPermissionDenied(error) {
+    const text = `${error?.code || ''} ${error?.message || ''}`;
+    return /permission[-_]denied|insufficient permissions/i.test(text);
+  }
+
+  // Permanently deletes every cloud record owned by this account. The first
+  // step writes a durable tombstone (accountTombstones/{uid}) that the
+  // Firestore rules use to reject every further create/update for this
+  // account from ANY client - other tabs, other devices, stale offline
+  // writes, or an ID token issued before the auth record is removed (ID
+  // tokens can stay valid for up to an hour after deletion). No client can
+  // update or remove the tombstone, so the lockout cannot expire. Deletes
+  // stay permitted so the cleanup below - and any retry - can finish.
+  // Every step is idempotent, and the caller learns how far it got from the
+  // thrown step marker.
   async function deleteAccountData() {
     deleting = true;
     assertCurrent();
     try {
-      // Server-enforced lockout: once this marker lands, the Firestore rules
-      // reject every further create/update for this account from ANY client
-      // (other tabs, other devices, stale offline writes). Deletes stay
-      // permitted so the cleanup below - and any retry - can finish.
-      await api.setDoc(workspaceRef(), { deleting: true, deletingStartedAt: new Date().toISOString() }, { merge: true });
+      // Firestore converts the Date to a Timestamp; the rules require one.
+      await api.setDoc(tombstoneRef(), { schema: 1, deletedAt: new Date() });
     } catch (error) {
-      error.deletionStage = 'marker';
-      error.strategiesDeleted = 0;
-      throw error;
+      // permission-denied on the tombstone means a previous deletion attempt
+      // already wrote it: clients may create it once and can never update or
+      // delete it, so the lockout is already active and cleanup can continue.
+      if (!isPermissionDenied(error)) {
+        error.deletionStage = 'tombstone';
+        error.strategiesDeleted = 0;
+        throw error;
+      }
     }
     const snapshot = await api.getDocs(strategyCollectionRef());
     assertCurrent();

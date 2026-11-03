@@ -1723,7 +1723,7 @@ html { color-scheme: dark; }
 }
 
 .feedback-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(4, 8, 8, .72); backdrop-filter: blur(12px); }
-.feedback-dialog { position: relative; width: min(100%, 520px); padding: 32px; color: var(--public-ink, #edf2ea); background: var(--public-panel, #131818); border: 1px solid var(--public-line, rgba(205, 220, 204, .16)); box-shadow: 20px 20px 0 rgba(184, 214, 122, .06); }
+.feedback-dialog { position: relative; width: min(100%, 520px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 32px; color: var(--public-ink, #edf2ea); background: var(--public-panel, #131818); border: 1px solid var(--public-line, rgba(205, 220, 204, .16)); box-shadow: 20px 20px 0 rgba(184, 214, 122, .06); }
 .feedback-dialog .modal-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; display: grid; place-items: center; color: var(--public-muted, #a6b0a7); background: transparent; border: 1px solid var(--public-line, rgba(205, 220, 204, .16)); cursor: pointer; }
 .feedback-dialog h2 { max-width: 420px; margin: 14px 0 10px; font: 500 34px/1 var(--font-display, Georgia, serif); letter-spacing: -.05em; }
 .feedback-dialog p { margin: 0 0 24px; color: var(--public-muted, #a6b0a7); font-size: 13px; line-height: 1.6; }

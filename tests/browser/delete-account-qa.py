@@ -85,7 +85,7 @@ try:
   page.get_by_role('button',name='Permanently delete my account',exact=True).click()
   page.get_by_text('cloud workspace data were deleted',exact=False).wait_for(timeout=8000)
   calls=page.evaluate('window.__calls')
-  checks['deletion_order']=calls==['reauthenticate','reauthenticate','setDoc:db/users/qa-delete','deleteDoc:db/users/qa-delete/strategies/s1','deleteDoc:db/users/qa-delete/strategies/s2','deleteDoc:db/users/qa-delete','deleteUser']
+  checks['deletion_order']=calls==['reauthenticate','reauthenticate','setDoc:db/accountTombstones/qa-delete','deleteDoc:db/users/qa-delete/strategies/s1','deleteDoc:db/users/qa-delete/strategies/s2','deleteDoc:db/users/qa-delete','deleteUser']
   checks['local_copy_removed']=page.evaluate("Object.keys(localStorage).filter(k=>k.includes('qa-delete')).length")==0
   checks['signed_out_confirmation']=page.locator('body').inner_text().find('cloud workspace data were deleted')>=0
   page.screenshot(path=f'{OUT}/delete-done-1280.png')
@@ -122,6 +122,10 @@ try:
   m.wait_for_timeout(400)
   btn.scroll_into_view_if_needed()
   checks['mobile_keyboard_button_reachable']=btn.is_visible()
+  # Decisive: the whole button must be inside the 430px-tall viewport.
+  box=btn.bounding_box()
+  checks['mobile_keyboard_button_fully_in_view']=bool(box) and box['y']>=0 and box['y']+box['height']<=430
+  m.wait_for_timeout(150)
   m.screenshot(path=f'{OUT}/delete-dialog-keyboard-390.png')
   m.close()
   b.close()

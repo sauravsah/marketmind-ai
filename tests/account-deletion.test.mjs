@@ -18,7 +18,16 @@ function makeFirestore({ failOn = null } = {}) {
     getDocs: async (ref) => ({
       docs: [...docs.keys()].filter((key) => key.startsWith(`${ref.path}/`)).map((key) => ({ ref: { path: key }, data: () => docs.get(key) })),
     }),
-    setDoc: async (ref, data) => { order.push(`set:${ref.path}`); docs.set(ref.path, { ...docs.get(ref.path), ...data }); },
+    setDoc: async (ref, data) => {
+      // Mirror the rules: the tombstone can be created once, never updated.
+      if (ref.path === 'db/accountTombstones/u1' && docs.has(ref.path)) {
+        const e = new Error('Missing or insufficient permissions.');
+        e.code = 'permission-denied';
+        throw e;
+      }
+      order.push(`set:${ref.path}`);
+      docs.set(ref.path, { ...docs.get(ref.path), ...data });
+    },
     deleteDoc: async (ref) => {
       if (failOn && ref.path.includes(failOn)) { const e = new Error('firestore unavailable'); throw e; }
       order.push(ref.path);
@@ -32,34 +41,48 @@ function makeRepository(firestore) {
   return createWorkspaceRepository({ client: { db: {}, firestoreApi: firestore.api }, userId: 'u1' });
 }
 
-test('cloud deletion removes strategies first, then the workspace document', async () => {
+test('cloud deletion writes the durable tombstone first, removes strategies, then the workspace document', async () => {
   const firestore = makeFirestore();
   const repository = makeRepository(firestore);
   const result = await repository.deleteAccountData();
-  assert.deepEqual(firestore.order, ['set:db/users/u1', 'db/users/u1/strategies/s1', 'db/users/u1/strategies/s2', 'db/users/u1']);
+  assert.deepEqual(firestore.order, ['set:db/accountTombstones/u1', 'db/users/u1/strategies/s1', 'db/users/u1/strategies/s2', 'db/users/u1']);
   assert.equal(result.strategiesDeleted, 2);
-  assert.equal(firestore.docs.size, 0);
+  // User data is gone; the tombstone remains to enforce the lockout.
+  assert.equal(firestore.docs.size, 1);
+  assert.ok(firestore.docs.has('db/accountTombstones/u1'));
 });
 
-test('cloud deletion is idempotent: a retry after success is a safe no-op', async () => {
+test('cloud deletion is idempotent: a retry tolerates the existing tombstone and is a safe no-op', async () => {
   const firestore = makeFirestore();
   const repository = makeRepository(firestore);
   await repository.deleteAccountData();
   const second = await repository.deleteAccountData();
   assert.equal(second.strategiesDeleted, 0);
-  assert.deepEqual(firestore.order.slice(4), ['set:db/users/u1', 'db/users/u1']);
+  // The tombstone rewrite is rejected by the rules (mocked) and tolerated.
+  assert.deepEqual(firestore.order.slice(4), ['db/users/u1']);
 });
 
-test('a marker failure stops deletion before any data is touched', async () => {
+test('a tombstone failure stops deletion before any data is touched', async () => {
   const firestore = makeFirestore();
   firestore.api.setDoc = async () => { throw new Error('firestore unavailable'); };
   const repository = makeRepository(firestore);
   await assert.rejects(repository.deleteAccountData(), (error) => {
-    assert.equal(error.deletionStage, 'marker');
+    assert.equal(error.deletionStage, 'tombstone');
     assert.equal(error.strategiesDeleted, 0);
     return true;
   });
   assert.equal(firestore.docs.size, 3);
+});
+
+test('a non-permission error still aborts even if the tombstone exists', async () => {
+  const firestore = makeFirestore();
+  const repository = makeRepository(firestore);
+  await repository.deleteAccountData();
+  firestore.api.setDoc = async () => { throw new Error('firestore unavailable'); };
+  await assert.rejects(repository.deleteAccountData(), (error) => {
+    assert.equal(error.deletionStage, 'tombstone');
+    return true;
+  });
 });
 
 test('a strategies failure reports the stage and partial count, leaving the workspace intact', async () => {
@@ -76,7 +99,8 @@ test('a strategies failure reports the stage and partial count, leaving the work
   firestore.api.deleteDoc = ((original) => async (ref) => original(ref))(async (ref) => { firestore.order.push(ref.path); firestore.docs.delete(ref.path); });
   const retry = await repository.deleteAccountData();
   assert.equal(retry.strategiesDeleted, 1);
-  assert.equal(firestore.docs.size, 0);
+  assert.equal(firestore.docs.size, 1);
+  assert.ok(firestore.docs.has('db/accountTombstones/u1'));
 });
 
 test('a workspace failure reports the stage after strategies were removed', async () => {
@@ -93,6 +117,7 @@ test('a workspace failure reports the stage after strategies were removed', asyn
     return true;
   });
   assert.ok(firestore.docs.has('db/users/u1'));
+  assert.ok(firestore.docs.has('db/accountTombstones/u1'));
 });
 
 test('local cleanup removes only the deleted account keys', () => {
