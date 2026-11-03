@@ -1876,3 +1876,75 @@ html { color-scheme: dark; }
 
 :root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-filter, .audience-depth-option, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .toast, .optional-details) :is(.eyebrow, .quiet-button, .text-button, .inline-link) { color: #d8f77d; }
 :root[data-theme="light"] :is(.source-modal, .source-snippet, .campaign-differentiation, .concept-card, .campaign-phases, .campaign-next-card, .campaign-editor, .territory-card, .territory-comparison, .campaign-overview-strip, .radar-summary, .audience-snapshot, .campaign-confirmation, .assessment-card, .research-unavailable, .cta-box, .voice-preview-card, .interpretation, .campaign-notice, .radar-notice, .audience-review-gate, .audience-review-note, .audience-review-filter, .audience-depth-option, .audience-item, .audience-item-hypothesis, .audience-item-observed, .audience-item-unknown, .audience-research-ready, .audience-research-light, .campaign-ready-banner, .radar-intelligence-status, .radar-stale-banner, .research-light-banner, .audience-update-banner, .campaign-incomplete-banner, .campaign-progress, .opportunity-compare, .opportunity-thesis, .opportunity-object, .detail-object, .contradiction-detail, .phase-note, .example-callout, .loading-board, .validation-card, .evidence-coverage-card, .toast, .optional-details) .field label { color: #b9bdb0; }
+
+/* First-run onboarding + example workspace */
+.verify-recovery-hint { margin: 14px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.onboarding-dialog { width: min(100%, 560px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.onboarding-dialog .field { margin-top: 16px; }
+.onboarding-choice-list { display: grid; gap: 10px; margin: 22px 0 6px; }
+.onboarding-choice { display: flex; align-items: center; gap: 13px; width: 100%; padding: 15px 16px; border: 1px solid #39392f; border-radius: 6px; background: #14161a; color: #ecebe4; text-align: left; transition: border-color .2s ease, background .2s ease; }
+.onboarding-choice:hover { border-color: #65783b; background: #1a2013; }
+.onboarding-choice > span:nth-child(2) { display: grid; gap: 5px; flex: 1; }
+.onboarding-choice strong { font-size: 13px; font-weight: 600; }
+.onboarding-choice small { color: #a3a097; font-size: 11px; line-height: 1.45; }
+.onboarding-choice > .icon { color: #6b7060; flex: none; }
+.onboarding-choice-mark { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border: 1px solid #3d4b29; border-radius: 50%; background: #202b16; color: #d1f36b; }
+.onboarding-steps { display: flex; gap: 6px; margin-bottom: 18px; }
+.onboarding-dot { width: 22px; height: 3px; border-radius: 2px; background: #33342e; }
+.onboarding-dot.done { background: #d1f36b; }
+.onboarding-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.onboarding-q { margin: 10px 0 8px; color: #ecebe4; font-family: var(--display); font-size: 25px; font-weight: 500; letter-spacing: -.045em; line-height: 1.12; }
+.onboarding-hint { margin: 10px 0 4px; color: #a3a097; font-size: 12px; line-height: 1.55; }
+.onboarding-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.onboarding-chip { padding: 9px 13px; border: 1px solid #393935; border-radius: 3px; background: transparent; color: #929088; font-size: 12px; transition: border-color .2s ease, background .2s ease, color .2s ease; }
+.onboarding-chip:hover { color: #ecebe4; border-color: #66665f; }
+.onboarding-chip.selected { border-color: #65783b; background: #202817; color: #d1f36b; }
+.onboarding-chip.locked { opacity: .45; cursor: not-allowed; }
+.onboarding-starters { display: grid; gap: 8px; margin-top: 16px; }
+.onboarding-starter { padding: 13px 15px; border: 1px solid #393935; border-radius: 5px; background: #121212; color: #c3c0b9; font-size: 12px; line-height: 1.5; text-align: left; transition: border-color .2s ease, background .2s ease; }
+.onboarding-starter:hover { border-color: #66665f; color: #ecebe4; }
+.onboarding-starter.selected { border-color: #65783b; background: #202817; color: #d1f36b; }
+.onboarding-done-list { display: grid; gap: 0; margin: 18px 0 6px; border-top: 1px solid var(--border-soft); }
+.onboarding-done-list > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+.onboarding-done-list strong { flex: none; font-size: 12px; font-weight: 600; }
+.onboarding-done-list span { color: #b2afa8; font-size: 12px; text-align: right; }
+.onboarding-nav { display: flex; align-items: center; gap: 12px; margin-top: 26px; }
+.onboarding-nav .button { margin-left: auto; }
+.onboarding-nav .text-button { color: #a3a097; }
+.onboarding-nav .quiet-button { order: -1; }
+.onboarding-card { margin-top: 17px; }
+.onboarding-card h3 { margin: 8px 0 0; font-family: var(--display); font-size: 20px; font-weight: 500; letter-spacing: -.04em; }
+.onboarding-card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+/* Example workspace (sample) */
+.sample-dialog { width: min(100%, 620px); }
+.sample-banner { margin: -8px 0 16px; padding: 8px 10px; border: 1px solid #536530; border-radius: 4px; background: #1d2416; color: #b9d18a; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-align: center; }
+.sample-title { margin: 0 0 4px; font-size: 24px; }
+.sample-stages { margin: 12px 0 20px; }
+.sample-field { display: grid; gap: 5px; margin-top: 10px; padding: 13px 15px; border: 1px solid #393935; border-radius: 5px; background: #121212; color: #5e5c57; font-size: 12px; }
+.sample-field.filled { color: #ecebe4; }
+.sample-field-label { color: #a3a097; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.sample-list { display: grid; gap: 10px; margin-top: 14px; }
+.sample-card { display: grid; gap: 7px; padding: 14px 15px; border: 1px solid #33342e; border-radius: 6px; background: #14161a; text-align: left; }
+.sample-card.dim { opacity: .55; }
+.sample-card strong { color: #ecebe4; font-size: 13px; font-weight: 500; line-height: 1.45; }
+.sample-tag { color: #9bb86a; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.sample-evidence { color: #a3a097; font-size: 10px; line-height: 1.5; }
+.sample-detail { color: #b2afa8; font-size: 12px; line-height: 1.55; }
+.sample-actions { display: flex; gap: 8px; margin-top: 4px; }
+.sample-mini { padding: 6px 12px; border: 1px solid #4c5635; border-radius: 4px; background: transparent; color: #d1f36b; font-size: 11px; }
+.sample-mini:hover { border-color: #d1f36b; }
+.sample-mini.approve-on { background: #22301a; border-color: #65783b; color: #d1f36b; }
+.sample-mini.reject-on { background: #2e1d18; border-color: #7d4a3a; color: #ed806b; }
+.sample-card.opp-selectable { cursor: pointer; transition: border-color .2s ease, background .2s ease; }
+.sample-card.opp-selectable:hover { border-color: #66665f; }
+.sample-card.opp-selectable.selected { border-color: #65783b; background: #1d2416; }
+
+@media (max-width: 640px) {
+  .onboarding-dialog { padding: 24px 20px; }
+  .onboarding-q { font-size: 22px; }
+  .onboarding-done-list > div { flex-direction: column; gap: 4px; }
+  .onboarding-done-list span { text-align: left; }
+  .onboarding-nav { flex-wrap: wrap; }
+  .onboarding-nav .button { margin-left: 0; flex: 1; justify-content: center; }
+}

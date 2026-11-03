@@ -1,7 +1,7 @@
 const DEFAULT_WORKSPACE = {
   workspaceName: '', defaultMarket: '', defaultAudience: '', defaultPlatform: '', defaultObjective: '',
 };
-const KEYS = { brand: 'brand-profile', strategies: 'strategies', workspace: 'workspace-settings' };
+const KEYS = { brand: 'brand-profile', strategies: 'strategies', workspace: 'workspace-settings', onboarding: 'onboarding' };
 
 // Account namespacing is UI isolation, not encryption or protection against
 // someone with access to this browser profile. Never assign unowned old keys.
@@ -47,6 +47,8 @@ export function createAccountStorage(getLocalStorage = () => window.localStorage
       return Boolean(snapshot.brand?.name || snapshot.brand?.description || snapshot.brand?.industry || snapshot.brand?.audience ||
         Object.values(snapshot.workspace).some(value => String(value || '').trim()) || snapshot.strategies.length);
     },
+    getOnboarding() { return read(KEYS.onboarding, null); },
+    saveOnboarding(value) { return write(KEYS.onboarding, { version: 1, ...value }); },
     getMigrationMarker(userId) { return userId === accountId ? read('migration', null) : null; },
     setMigrationMarker(userId, value = { completedAt: new Date().toISOString() }) { return userId === accountId && write('migration', value); },
   };

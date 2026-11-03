@@ -119,6 +119,29 @@ async function waitForInitialUser(auth, onAuthStateChanged) {
   });
 }
 
+
+// User-facing copy for a failed email-verification link. Firebase shows the
+// same page for a consumed and an expired link, so the distinction here comes
+// from the error code when the app itself handles the action link.
+export function describeEmailActionError(code) {
+  if (code === 'auth/expired-action-code') {
+    return {
+      title: 'That verification link has expired.',
+      body: 'Verification links only stay valid for a while. Send yourself a fresh one below and open the newest email.',
+    };
+  }
+  if (code === 'auth/invalid-action-code') {
+    return {
+      title: 'That verification link was already used.',
+      body: 'If you opened it earlier, your email may already be verified - this page keeps checking automatically. If nothing happens, send a fresh link below.',
+    };
+  }
+  return {
+    title: 'That verification link did not work.',
+    body: 'Send yourself a fresh link below and open the newest email.',
+  };
+}
+
 export const authService = {
   async init() {
     try {
@@ -126,17 +149,22 @@ export const authService = {
       if (!firebase) return { configured: false, session: null, user: null };
       const actionMode = actionModeFromLocation();
       const actionCode = actionCodeFromLocation();
+      let actionError = null;
       if (actionMode === 'verifyEmail' && actionCode) {
         try {
           await firebase.authApi.applyActionCode(firebase.auth, actionCode);
           clearActionQuery();
-        } catch { /* The verify screen can still offer a fresh email. */ }
+        } catch (error) {
+          // Kept so the verify screen can say what happened to the link and
+          // offer the right recovery instead of failing silently.
+          actionError = { mode: actionMode, code: error?.code || 'unknown' };
+        }
       }
       const currentUser = await waitForInitialUser(firebase.auth, firebase.authApi.onAuthStateChanged);
       if (currentUser && actionMode === 'verifyEmail' && actionCode) {
         try { await firebase.authApi.reload(currentUser); } catch { /* A later auth refresh can retry the profile update. */ }
       }
-      return { configured: true, session: toSession(currentUser), user: toUser(currentUser) };
+      return { configured: true, session: toSession(currentUser), user: toUser(currentUser), actionError };
     } catch (error) {
       return { configured: false, session: null, user: null, error };
     }

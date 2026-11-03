@@ -20,9 +20,29 @@ import { assessIntelligence, campaignFreshness, journeyStageReview, researchIsSt
 import { applyCampaignOverrides, campaignSectionHasContent, regenerateConfirmCopy } from './client/campaign.js';
 import { storage } from './storage.js';
 import { collectStrategyBrief } from './strategy-brief.js';
-import { authService, authErrorMessage, authenticatedFetch } from './auth.js';
+import { authService, authErrorMessage, authenticatedFetch, describeEmailActionError } from './auth.js';
 import { createWorkspaceRepository, summarizeMigration } from './repository.js';
 import { decideAuthRoute, isProtectedRoute, isVerifiedUser, routeFromHash as mapHashRoute, PUBLIC_ROUTES } from './auth-routes.js';
+import {
+  ONBOARDING_CATEGORIES,
+  ONBOARDING_OBJECTIVES,
+  ONBOARDING_AUDIENCE_TYPES,
+  ONBOARDING_MARKETS,
+  SAMPLE_STAGE_NAMES,
+  SAMPLE_BRIEF,
+  SAMPLE_SIGNALS,
+  SAMPLE_CLAIMS,
+  SAMPLE_OPPORTUNITIES,
+  SAMPLE_CAMPAIGN,
+  buildOnboardingPrefill,
+  buildQuestionStarters,
+  createOnboardingSession,
+  createSampleSession,
+  mapOnboardingObjective,
+  onboardingStepReady,
+  sampleStageUnlocked,
+  shouldOfferOnboarding,
+} from './onboarding.js';
 import { appendResearchRun, countResearchSignals, researchRunIsCurrent } from './research-history.js';
 import {
   AUDIENCE_ITEM_KEYS,
@@ -63,7 +83,8 @@ const state = {
   compareTerritoryIds: [],
   openOpportunityId: null,
   compareOpportunityIds: [],
-  auth: { status: 'loading', configured: null, session: null, user: null, error: null, redirectTo: null, feedback: null, pendingEmail: '' },
+  auth: { status: 'loading', configured: null, session: null, user: null, error: null, redirectTo: null, feedback: null, pendingEmail: '', actionError: null },
+  onboarding: null,
   cloud: { status: 'idle', repository: null, error: null, userId: null },
   migration: { status: 'idle', summary: null, error: null },
   betaFeedback: { open: false, sending: false, error: null },
@@ -254,7 +275,8 @@ function authPage(route) {
   const configNotice = state.auth.configured === false ? `<div class="config-notice" role="status">${icon('settings', 15)} <span>Authentication is not connected yet. Add the Firebase web configuration to the server environment to activate accounts.</span></div>` : '';
   let content = '';
   if (isVerify) {
-    content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ONE SMALL STEP</div><h1>Check your<br><em>inbox.</em></h1><p>We sent a verification link${email ? ` to <strong>${escapeHtml(email)}</strong>` : ''}. Verify your email before opening the workspace. Email delivery can take a few minutes; if it doesn't arrive, check your Spam folder. This page keeps checking in the background and opens the workspace the moment you're verified.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-auth-action="resend">Resend verification email ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
+    const actionCopy = state.auth.actionError ? describeEmailActionError(state.auth.actionError.code) : null;
+    content = `<div class="auth-message-card"><div class="auth-icon">${icon('check', 24)}</div><div class="eyebrow">ONE SMALL STEP</div><h1>Check your<br><em>inbox.</em></h1><p>We sent a verification link${email ? ` to <strong>${escapeHtml(email)}</strong>` : ''}. Verify your email before opening the workspace. Email delivery can take a few minutes; if it doesn't arrive, check your Spam folder. This page keeps checking in the background and opens the workspace the moment you're verified.</p>${actionCopy ? `<div class="form-feedback error" role="alert"><strong>${escapeHtml(actionCopy.title)}</strong> ${escapeHtml(actionCopy.body)}</div>` : ''}<p class="verify-recovery-hint">Opened your link and landed on an error page instead? If it said the link was already used, you may already be verified - this page keeps checking automatically. If nothing happens within a minute, send a fresh link below and open the newest email.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="status">${escapeHtml(feedback.message)}</div>` : ''}<button class="button button-primary button-wide" type="button" data-auth-action="resend">Resend verification email ${icon('arrow', 16)}</button><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
   } else if (isForgot) {
     content = `<div class="auth-form-card"><div class="eyebrow">ACCOUNT RECOVERY</div><h1>Reset your<br><em>password.</em></h1><p>Enter your email and we’ll send a secure reset link.</p>${feedback ? `<div class="form-feedback ${feedback.type}" role="alert">${escapeHtml(feedback.message)}</div>` : ''}<form id="forgot-form" class="auth-form" novalidate><div class="field"><label for="auth-email">Email address</label><input id="auth-email" name="email" type="email" autocomplete="email" required value="${escapeHtml(email)}" placeholder="you@company.com"></div><button class="button button-primary button-wide" type="submit">Send reset link ${icon('arrow', 16)}</button></form><button class="text-button centered" type="button" data-route="sign-in">Back to sign in</button></div>`;
   } else if (isReset) {
@@ -277,6 +299,71 @@ function accessRequestModal() {
     ? `<p>Request received. Your account email (${escapeHtml(email)}) is in the beta administrator's review queue. Access is added by hand in small waves, so there is no fixed wait we can promise. When your seat is switched on, research and generation start working on this account - no need to sign up again.</p><div class="feedback-dialog-actions"><button class="button button-primary" type="button" data-action="close-access-request">Done</button></div>`
     : `<p>MarketMind is in an invite-only pilot. Your account is registered, but research and generation are not turned on for it yet.</p><p>Request a seat and your account email (${escapeHtml(email)}) goes to the beta administrator's review queue. Requesting does not change access by itself - seats are switched on by hand.</p>${state.accessRequest.error ? `<div class="form-feedback error" role="alert">${escapeHtml(state.accessRequest.error)}</div>` : ''}<div class="feedback-dialog-actions"><button class="button button-secondary" type="button" data-action="close-access-request">Not now</button><button class="button button-primary" type="button" data-action="submit-access-request" ${state.accessRequest.sending ? 'disabled' : ''}>${state.accessRequest.sending ? 'Sending…' : 'Request access'} ${icon('arrow', 15)}</button></div>`;
   return `<div class="feedback-overlay" data-action="close-access-request"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="access-request-title" data-access-request-dialog><button class="modal-close" type="button" aria-label="Close access request" data-action="close-access-request">${icon('close', 17)}</button><div class="eyebrow">INVITE-ONLY PILOT</div><h2 id="access-request-title">Request a pilot seat.</h2>${body}</section></div>`;
+}
+
+
+function onboardingModal() {
+  const onboarding = state.onboarding;
+  if (!onboarding) return '';
+  if (onboarding.view === 'sample') return sampleOverlay(onboarding);
+  if (onboarding.view === 'questions') return questionsOverlay(onboarding);
+  return `<div class="feedback-overlay onboarding-overlay" data-onboarding-overlay><section class="feedback-dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><button class="modal-close" type="button" aria-label="Close setup" data-onboarding-action="dismiss">${icon('close', 17)}</button><div class="eyebrow">WELCOME TO MARKETMIND</div><h2 id="onboarding-title">Two quick ways in.</h2><p>Answer five taps' worth of questions and your workspace opens already filled in - or look around a finished example first. Nothing here starts research or spends anything.</p><div class="onboarding-choice-list"><button class="onboarding-choice" type="button" data-onboarding-action="choice-questions"><span class="onboarding-choice-mark">${icon('sparkles', 17)}</span><span><strong>Answer five quick questions</strong><small>Your brand profile, workspace defaults and first brief get filled from your answers - all editable.</small></span>${icon('arrow', 15)}</button><button class="onboarding-choice" type="button" data-onboarding-action="choice-sample"><span class="onboarding-choice-mark">${icon('radar', 17)}</span><span><strong>Explore an example</strong><small>A complete sample workspace for a fictional brand. Fixed example data - no live research, nothing saved to you.</small></span>${icon('arrow', 15)}</button></div><button class="text-button centered" type="button" data-onboarding-action="choice-own">Start on my own</button></section></div>`;
+}
+
+function onboardingChip(question, label, selected) {
+  return `<button type="button" class="onboarding-chip ${selected ? 'selected' : ''}" aria-pressed="${selected}" data-onboarding-chip="${question}" data-value="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+}
+
+function questionsOverlay(onboarding) {
+  const { step, answers } = onboarding;
+  const dots = [0, 1, 2, 3, 4].map((i) => `<span class="onboarding-dot ${i < step || step === 5 ? 'done' : ''}"></span>`).join('');
+  let body = '';
+  if (step === 0) {
+    body = `<div class="onboarding-q">What are you building?</div><div class="onboarding-hint">A name and a rough category is enough for now.</div><div class="field"><label for="onboarding-brand">Brand or product name</label><input id="onboarding-brand" name="brand" maxlength="80" value="${escapeHtml(answers.brand)}" placeholder="e.g. Stride" data-onboarding-field="brand"></div><div class="onboarding-chips">${ONBOARDING_CATEGORIES.map((item) => onboardingChip('category', item, answers.category === item)).join('')}</div>`;
+  } else if (step === 1) {
+    body = `<div class="onboarding-q">What should your marketing do first?</div><div class="onboarding-hint">Pick the one that matters right now. You can change it later.</div><div class="onboarding-chips">${ONBOARDING_OBJECTIVES.map((option) => onboardingChip('objective', option.label, answers.objective === option.label)).join('')}</div>`;
+  } else if (step === 2) {
+    body = `<div class="onboarding-q">Who is it for?</div><div class="onboarding-hint">A rough idea is fine. MarketMind's research fills in the real depth later.</div><div class="onboarding-chips">${ONBOARDING_AUDIENCE_TYPES.map((item) => onboardingChip('audienceType', item, answers.audienceType === item)).join('')}</div><div class="field"><label for="onboarding-audience-detail">Anything specific? <span class="optional">OPTIONAL</span></label><input id="onboarding-audience-detail" name="audienceDetail" maxlength="120" value="${escapeHtml(answers.audienceDetail)}" placeholder="e.g. First-time founders in India" data-onboarding-field="audienceDetail"></div>`;
+  } else if (step === 3) {
+    body = `<div class="onboarding-q">Where does this matter?</div><div class="onboarding-hint">Trends and audience behavior are local, so this keeps the intelligence relevant.</div><div class="onboarding-chips">${ONBOARDING_MARKETS.map((item) => onboardingChip('market', item, answers.market === item)).join('')}</div>`;
+  } else if (step === 4) {
+    const starters = buildQuestionStarters(answers);
+    body = `<div class="onboarding-q">What's the question on your mind?</div><div class="onboarding-hint">Tap a starter built from your answers, or write your own.</div><div class="onboarding-starters">${starters.map((starter) => `<button type="button" class="onboarding-starter ${answers.question === starter ? 'selected' : ''}" aria-pressed="${answers.question === starter}" data-onboarding-starter="${escapeHtml(starter)}">${escapeHtml(starter)}</button>`).join('')}</div><div class="field"><label for="onboarding-question">Or write it your way</label><textarea id="onboarding-question" name="question" maxlength="600" rows="3" placeholder="What challenge, launch, or opportunity are you exploring?" data-onboarding-field="question">${escapeHtml(answers.question)}</textarea></div>`;
+  } else {
+    const prefill = buildOnboardingPrefill(answers);
+    const brandLine = [prefill.brand.name || 'Your brand', prefill.brand.industry].filter(Boolean).join(' · ');
+    const defaultsLine = [prefill.workspace.defaultObjective, prefill.workspace.defaultAudience, prefill.workspace.defaultMarket].filter(Boolean).join(' · ');
+    body = `<div class="onboarding-q">${prefill.brand.name ? `${escapeHtml(prefill.brand.name)} is ready.` : 'Your workspace is ready.'}</div><div class="onboarding-done-list"><div><strong>Brand profile</strong><span>${escapeHtml(brandLine)}</span></div><div><strong>Workspace defaults</strong><span>${escapeHtml(defaultsLine || 'Not set')}</span></div><div><strong>First brief drafted</strong><span>${escapeHtml(prefill.strategy.idea)}</span></div></div><div class="onboarding-hint">Everything above stays editable and is filled only from your answers. Research, audience claims and opportunities still come only from real runs that you start.</div>`;
+  }
+  const ready = step === 5 || onboardingStepReady(answers, step);
+  const nav = `<div class="onboarding-nav">${step > 0 && step < 5 ? `<button class="quiet-button" type="button" data-onboarding-action="back">Back</button>` : ''}${step < 4 ? `<button class="button button-primary" type="button" data-onboarding-action="next" ${ready ? '' : 'disabled'}>Next ${icon('arrow', 15)}</button>` : ''}${step === 4 ? `<button class="button button-primary" type="button" data-onboarding-action="next" ${ready ? '' : 'disabled'}>Review ${icon('arrow', 15)}</button>` : ''}${step === 5 ? `<button class="button button-primary" type="button" data-onboarding-action="finish">See my workspace ${icon('arrow', 15)}</button>` : ''}${step < 4 ? `<button class="text-button" type="button" data-onboarding-action="skip-step">Skip</button>` : ''}</div>`;
+  return `<div class="feedback-overlay onboarding-overlay" data-onboarding-overlay><section class="feedback-dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><button class="modal-close" type="button" aria-label="Close setup" data-onboarding-action="dismiss">${icon('close', 17)}</button><div class="onboarding-steps" aria-hidden="true">${dots}</div><div class="eyebrow">QUICK SETUP · ${Math.min(step + 1, 5)} OF 5</div><h2 id="onboarding-title" class="onboarding-sr">Quick setup</h2>${body}${nav}</section></div>`;
+}
+
+function sampleFieldBox(label, value, placeholder) {
+  return `<div class="sample-field ${value ? 'filled' : ''}"><span class="sample-field-label">${escapeHtml(label)}</span><span>${escapeHtml(value || placeholder)}</span></div>`;
+}
+
+function sampleOverlay(onboarding) {
+  const sample = onboarding.sample;
+  const stage = sample.stage;
+  const unlocked = sampleStageUnlocked(sample);
+  const approvedCount = sample.claimStates.filter((claimState) => claimState === 'approved').length;
+  const stageChips = SAMPLE_STAGE_NAMES.map((name, index) => `<button type="button" class="onboarding-chip ${stage === index ? 'selected' : ''} ${unlocked[index] ? '' : 'locked'}" aria-disabled="${unlocked[index] ? 'false' : 'true'}" data-onboarding-action="sample-stage" data-stage="${index}">${escapeHtml(name)}</button>`).join('');
+  let body = '';
+  if (stage === 0) {
+    body = `<div class="onboarding-hint">The brief starts empty, exactly like the real form. One tap on the example fills it - no typing, no research spend.</div>${sampleFieldBox('Strategy question', sample.briefFilled ? SAMPLE_BRIEF.question : '', 'What challenge, launch, or opportunity are you exploring?')}${sampleFieldBox('Audience', sample.briefFilled ? SAMPLE_BRIEF.audience : '', 'e.g. First-time founders in India')}${sampleFieldBox('Market / region', sample.briefFilled ? SAMPLE_BRIEF.market : '', 'e.g. India')}${sampleFieldBox('Objective', sample.briefFilled ? SAMPLE_BRIEF.objective : '', 'Choose an objective')}${sample.briefFilled ? '' : `<button class="onboarding-starter" type="button" data-onboarding-action="sample-fill">Use this example - fills every field above</button>`}`;
+  } else if (stage === 1) {
+    body = `<div class="onboarding-hint">Example Market Intelligence: what a finished research run returns. Each signal keeps its evidence label - and each label here says it is simulated.</div><div class="sample-list">${SAMPLE_SIGNALS.map((signal) => `<div class="sample-card"><span class="sample-tag">Example signal</span><strong>${escapeHtml(signal.name)}</strong><span class="sample-evidence">${escapeHtml(signal.evidence)}</span></div>`).join('')}</div>`;
+  } else if (stage === 2) {
+    body = `<div class="onboarding-hint">Example Audience Intelligence. Claims wait for review, exactly like the real product - approve at least one to unlock the radar.</div><div class="sample-list">${SAMPLE_CLAIMS.map((claim, index) => `<div class="sample-card ${sample.claimStates[index] === 'rejected' ? 'dim' : ''}"><span class="sample-tag">Example claim · ${sample.claimStates[index] === 'pending' ? 'Needs review' : sample.claimStates[index] === 'approved' ? 'Approved' : 'Rejected'}</span><strong>${escapeHtml(claim.name)}</strong><span class="sample-evidence">${escapeHtml(claim.evidence)}</span><span class="sample-actions"><button type="button" class="sample-mini ${sample.claimStates[index] === 'approved' ? 'approve-on' : ''}" data-onboarding-action="sample-claim" data-index="${index}" data-decision="approved">Approve</button><button type="button" class="sample-mini ${sample.claimStates[index] === 'rejected' ? 'reject-on' : ''}" data-onboarding-action="sample-claim" data-index="${index}" data-decision="rejected">Reject</button></span></div>`).join('')}</div>${approvedCount === 0 ? `<div class="onboarding-hint">Radar stays locked until you approve a claim - the same gate as the real workspace.</div>` : ''}`;
+  } else if (stage === 3) {
+    body = `<div class="onboarding-hint">Example Opportunity Radar: ranked directions built from the research and your approved claims. Select one to hand to the campaign stage.</div><div class="sample-list">${SAMPLE_OPPORTUNITIES.map((opportunity, index) => `<button type="button" class="sample-card opp-selectable ${sample.selectedOpportunity === index ? 'selected' : ''}" aria-pressed="${sample.selectedOpportunity === index}" data-onboarding-action="sample-opp" data-index="${index}"><span class="sample-tag">Example opportunity · Confidence: ${escapeHtml(opportunity.confidence)}${sample.selectedOpportunity === index ? ' · Selected' : ''}</span><strong>${escapeHtml(opportunity.name)}</strong><span class="sample-detail">${escapeHtml(opportunity.thesis)}</span><span class="sample-evidence">${escapeHtml(opportunity.scores)}</span></button>`).join('')}</div>${sample.selectedOpportunity === null ? `<div class="onboarding-hint">Select an opportunity to continue - the campaign stage builds only from a real selection.</div>` : ''}`;
+  } else {
+    body = `<div class="onboarding-hint">Example Campaign Strategy, built from "${escapeHtml(SAMPLE_OPPORTUNITIES[sample.selectedOpportunity ?? 0].name)}". In the real product every line links back to the evidence behind it.</div><div class="sample-list">${SAMPLE_CAMPAIGN.map((card) => `<div class="sample-card"><span class="sample-tag">${escapeHtml(card.tag)}</span><strong>${escapeHtml(card.name)}</strong><span class="sample-detail">${escapeHtml(card.detail)}</span></div>`).join('')}</div><div class="onboarding-hint">That is a complete workspace. Everything you tapped through was fixed example content - a real workspace builds this from live research that you start.</div>`;
+  }
+  const nav = `<div class="onboarding-nav">${stage > 0 ? `<button class="quiet-button" type="button" data-onboarding-action="sample-back">Back</button>` : ''}${stage === 0 ? `<button class="button button-primary" type="button" data-onboarding-action="sample-next" ${sample.briefFilled ? '' : 'disabled'}>Run example research ${icon('arrow', 15)}</button>` : ''}${stage === 1 ? `<button class="button button-primary" type="button" data-onboarding-action="sample-next">Review audience claims ${icon('arrow', 15)}</button>` : ''}${stage === 2 ? `<button class="button button-primary" type="button" data-onboarding-action="sample-next" ${approvedCount > 0 ? '' : 'disabled'}>Open the radar ${icon('arrow', 15)}</button>` : ''}${stage === 3 ? `<button class="button button-primary" type="button" data-onboarding-action="sample-next" ${sample.selectedOpportunity !== null ? '' : 'disabled'}>Build campaign direction ${icon('arrow', 15)}</button>` : ''}<button class="text-button" type="button" data-onboarding-action="sample-leave">Leave example</button></div>`;
+  return `<div class="feedback-overlay onboarding-overlay" data-onboarding-overlay><section class="feedback-dialog onboarding-dialog sample-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><button class="modal-close" type="button" aria-label="Leave example" data-onboarding-action="sample-leave">${icon('close', 17)}</button><div class="sample-banner">SAMPLE WORKSPACE · FIXED EXAMPLE DATA · NOT LIVE RESEARCH</div><h2 id="onboarding-title" class="sample-title">Stride - a running app</h2><div class="onboarding-chips sample-stages" aria-label="Example stages">${stageChips}</div>${body}${nav}</section></div>`;
 }
 
 function renderPublic() {
@@ -429,6 +516,7 @@ async function applyAuthState(session, user = session?.user || null) {
     return;
   }
   state.auth.status = 'signed-in';
+  state.auth.actionError = null;
   await loadCloudWorkspace();
 }
 
@@ -634,7 +722,7 @@ function renderShell(content) {
         </header>
         <div class="page-wrap">${workspaceSyncNotice}${progressionRail()}${content}</div>
       </main>
-      <div id="toast-region" class="toast-region" aria-live="polite"></div>${betaFeedbackModal()}${accessRequestModal()}
+      <div id="toast-region" class="toast-region" aria-live="polite"></div>${betaFeedbackModal()}${accessRequestModal()}${onboardingModal()}
     </div>`);
   attachGlobalEvents();
 }
@@ -719,6 +807,7 @@ function dashboardPage() {
         <div class="hero-copy"><div class="status-kicker"><span class="status-pulse"></span> YOUR STRATEGY WORKSPACE</div><h2>From a sharp question<br>to a <span>clear direction.</span></h2><p>Start with what's on your mind. MarketMind will keep your brand context close as the intelligence layer grows.</p><button class="text-button" type="button" data-route="strategy" data-new-strategy="true">Start a new strategy ${icon('arrow', 16)}</button></div>
         <div class="hero-diagram" aria-label="MarketMind workflow diagram"><div class="diagram-orbit orbit-one"></div><div class="diagram-orbit orbit-two"></div><div class="diagram-core">${icon('sparkles', 24)}<span>YOUR<br>QUESTION</span></div><div class="diagram-node node-top">MARKET<br>SIGNALS</div><div class="diagram-node node-right">AUDIENCE<br>CONTEXT</div><div class="diagram-node node-bottom">NEXT<br>MOVE</div><div class="diagram-line line-a"></div><div class="diagram-line line-b"></div><div class="diagram-line line-c"></div></div>
       </section>
+      ${state.strategies.length === 0 ? `<section class="content-card onboarding-card"><div><div class="eyebrow">NEW HERE?</div><h3>Get set up your way.</h3><p class="card-note">Five quick taps fill your brand profile, defaults and first brief - or look around a finished example workspace first. Neither starts research or spends anything.</p><div class="onboarding-card-actions"><button class="button button-primary" type="button" data-onboarding-open="questions">Answer five questions ${icon('arrow', 15)}</button><button class="button button-secondary" type="button" data-onboarding-open="sample">Explore an example</button></div></div></section>` : ''}
       <section class="dashboard-intelligence" aria-labelledby="dashboard-intelligence-title">
         <div class="dashboard-section-heading"><div><div class="eyebrow">YOUR INTELLIGENCE PATH</div><h2 id="dashboard-intelligence-title">See what is ready to use.</h2></div><button class="quiet-button" type="button" data-route="workspace">Workspace defaults ${icon('arrow', 14)}</button></div>
         <div class="dashboard-signal-grid">${intelligenceSteps.map((item) => `<button class="dashboard-signal ${item.ready ? 'ready' : 'not-started'}" type="button" data-route="${item.route}"><span class="dashboard-signal-number">${item.number}</span><span class="dashboard-signal-copy"><strong>${item.label}</strong><small>${item.detail}</small></span>${icon('arrow', 14)}</button>`).join('')}</div>
@@ -1861,6 +1950,108 @@ function attachRadarEvents() {
   document.querySelectorAll('[data-action="develop-campaign"]').forEach((button) => button.addEventListener('click', () => { const radar = currentOpportunityRadar(); const opportunity = radar.opportunities?.find((item) => item.id === button.dataset.id); if (!opportunity) return; opportunity.status = 'selected'; state.strategy.selectedOpportunityId = opportunity.id; state.strategy.opportunityRadar = radar; persistStrategy(state.strategy); navigate('campaigns'); }));
 }
 
+
+function openOnboarding(view = 'choice') {
+  state.onboarding = createOnboardingSession();
+  if (view === 'questions') state.onboarding.view = 'questions';
+  if (view === 'sample') { state.onboarding.view = 'sample'; state.onboarding.sample = createSampleSession(); }
+  render();
+}
+
+function closeOnboarding(path) {
+  storage.saveOnboarding({ completedAt: new Date().toISOString(), path });
+  state.onboarding = null;
+  render();
+}
+
+function completeOnboarding() {
+  const answers = state.onboarding?.answers || {};
+  const prefill = buildOnboardingPrefill(answers);
+  if (prefill.brand.name || prefill.brand.industry || prefill.brand.audience) {
+    state.brand = {
+      ...state.brand,
+      ...(prefill.brand.name ? { name: prefill.brand.name } : {}),
+      ...(prefill.brand.industry ? { industry: prefill.brand.industry } : {}),
+      ...(prefill.brand.audience ? { audience: prefill.brand.audience } : {}),
+    };
+    storage.saveBrand(state.brand);
+  }
+  state.workspace = { ...state.workspace, ...prefill.workspace };
+  persistWorkspace();
+  // The first brief stays a draft: it is not saved and no research starts
+  // until the user chooses to.
+  state.strategy = { ...createDefaultStrategy(), ...prefill.strategy };
+  storage.saveOnboarding({ completedAt: new Date().toISOString(), path: 'questions' });
+  state.onboarding = null;
+  navigate('strategy');
+  showToast('Your answers filled the brand profile, workspace defaults and this brief. Edit anything.', 'success');
+}
+
+function attachOnboardingEvents() {
+  document.querySelectorAll('[data-onboarding-open]').forEach((element) => element.addEventListener('click', () => openOnboarding(element.dataset.onboardingOpen)));
+  document.querySelectorAll('[data-onboarding-action]').forEach((element) => element.addEventListener('click', (event) => {
+    const action = element.dataset.onboardingAction;
+    const onboarding = state.onboarding;
+    if (!onboarding && action !== 'dismiss') return;
+    if (action === 'dismiss' || action === 'choice-own') {
+      if (event.target.closest('.feedback-overlay') && event.target !== event.currentTarget && event.currentTarget.classList.contains('feedback-overlay')) return;
+      closeOnboarding(action === 'dismiss' ? 'dismissed' : 'own');
+      return;
+    }
+    if (action === 'choice-questions') { onboarding.view = 'questions'; render(); return; }
+    if (action === 'choice-sample') { onboarding.view = 'sample'; onboarding.sample = createSampleSession(); render(); return; }
+    if (action === 'next') { onboarding.step = Math.min(onboarding.step + 1, 5); render(); return; }
+    if (action === 'back') { onboarding.step = Math.max(onboarding.step - 1, 0); render(); return; }
+    if (action === 'skip-step') { onboarding.step = Math.min(onboarding.step + 1, 5); render(); return; }
+    if (action === 'finish') { completeOnboarding(); return; }
+    const sample = onboarding.sample;
+    if (!sample) return;
+    if (action === 'sample-fill') { sample.briefFilled = true; render(); return; }
+    if (action === 'sample-claim') {
+      const index = Number(element.dataset.index);
+      const decision = element.dataset.decision;
+      sample.claimStates[index] = sample.claimStates[index] === decision ? 'pending' : decision;
+      render();
+      return;
+    }
+    if (action === 'sample-opp') {
+      const index = Number(element.dataset.index);
+      sample.selectedOpportunity = sample.selectedOpportunity === index ? null : index;
+      render();
+      return;
+    }
+    if (action === 'sample-stage') {
+      const index = Number(element.dataset.stage);
+      if (sampleStageUnlocked(sample)[index]) { sample.stage = index; render(); }
+      return;
+    }
+    if (action === 'sample-next') { sample.stage = Math.min(sample.stage + 1, 4); render(); return; }
+    if (action === 'sample-back') { sample.stage = Math.max(sample.stage - 1, 0); render(); return; }
+    if (action === 'sample-leave') { closeOnboarding('example'); }
+  }));
+  document.querySelectorAll('[data-onboarding-chip]').forEach((element) => element.addEventListener('click', () => {
+    const onboarding = state.onboarding;
+    if (!onboarding) return;
+    const key = element.dataset.onboardingChip;
+    onboarding.answers[key] = onboarding.answers[key] === element.dataset.value ? '' : element.dataset.value;
+    render();
+  }));
+  document.querySelectorAll('[data-onboarding-starter]').forEach((element) => element.addEventListener('click', () => {
+    const onboarding = state.onboarding;
+    if (!onboarding) return;
+    onboarding.answers.question = onboarding.answers.question === element.dataset.onboardingStarter ? '' : element.dataset.onboardingStarter;
+    render();
+  }));
+  document.querySelectorAll('[data-onboarding-field]').forEach((element) => element.addEventListener('input', () => {
+    const onboarding = state.onboarding;
+    if (!onboarding) return;
+    onboarding.answers[element.dataset.onboardingField] = element.value;
+    // Advance buttons enable as soon as the step has a usable answer.
+    const next = document.querySelector('[data-onboarding-action="next"]');
+    if (next) next.disabled = !onboardingStepReady(onboarding.answers, onboarding.step);
+  }));
+}
+
 function render() {
   if (state.auth.status === 'loading') {
     root.innerHTML = loadingPage();
@@ -1881,6 +2072,9 @@ function render() {
   if (state.page === 'reset-password') {
     renderPublic();
     return;
+  }
+  if (!state.onboarding && state.page === 'dashboard' && shouldOfferOnboarding({ strategies: state.strategies, brand: state.brand, record: storage.getOnboarding() })) {
+    state.onboarding = createOnboardingSession();
   }
   const page = { dashboard: dashboardPage, strategy: strategyPage, research: researchPage, audience: audiencePage, brand: brandPage, radar: opportunityPage, campaigns: campaignPage, workspace: workspacePage }[state.page];
   if (!page) { state.page = 'dashboard'; return render(); }
@@ -1948,6 +2142,7 @@ function attachGlobalEvents() {
     render();
   }));
   document.querySelector('[data-action="submit-access-request"]')?.addEventListener('click', () => { submitAccessRequest(); });
+  attachOnboardingEvents();
   document.querySelector('#beta-feedback-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const account = storage.capture();
@@ -2206,6 +2401,7 @@ async function bootstrap() {
   const initial = await authService.init();
   state.auth.configured = initial.configured;
   state.auth.error = initial.error || null;
+  state.auth.actionError = initial.actionError || null;
   const subscription = await authService.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') {
       state.auth.session = session;
