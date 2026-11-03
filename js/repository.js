@@ -194,6 +194,17 @@ export function createWorkspaceRepository({ client, userId, local = storage, isC
   async function deleteAccountData() {
     deleting = true;
     assertCurrent();
+    try {
+      // Server-enforced lockout: once this marker lands, the Firestore rules
+      // reject every further create/update for this account from ANY client
+      // (other tabs, other devices, stale offline writes). Deletes stay
+      // permitted so the cleanup below - and any retry - can finish.
+      await api.setDoc(workspaceRef(), { deleting: true, deletingStartedAt: new Date().toISOString() }, { merge: true });
+    } catch (error) {
+      error.deletionStage = 'marker';
+      error.strategiesDeleted = 0;
+      throw error;
+    }
     const snapshot = await api.getDocs(strategyCollectionRef());
     assertCurrent();
     let strategiesDeleted = 0;

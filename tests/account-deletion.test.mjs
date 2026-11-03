@@ -18,7 +18,7 @@ function makeFirestore({ failOn = null } = {}) {
     getDocs: async (ref) => ({
       docs: [...docs.keys()].filter((key) => key.startsWith(`${ref.path}/`)).map((key) => ({ ref: { path: key }, data: () => docs.get(key) })),
     }),
-    setDoc: async (ref, data) => { docs.set(ref.path, data); },
+    setDoc: async (ref, data) => { order.push(`set:${ref.path}`); docs.set(ref.path, { ...docs.get(ref.path), ...data }); },
     deleteDoc: async (ref) => {
       if (failOn && ref.path.includes(failOn)) { const e = new Error('firestore unavailable'); throw e; }
       order.push(ref.path);
@@ -36,7 +36,7 @@ test('cloud deletion removes strategies first, then the workspace document', asy
   const firestore = makeFirestore();
   const repository = makeRepository(firestore);
   const result = await repository.deleteAccountData();
-  assert.deepEqual(firestore.order, ['db/users/u1/strategies/s1', 'db/users/u1/strategies/s2', 'db/users/u1']);
+  assert.deepEqual(firestore.order, ['set:db/users/u1', 'db/users/u1/strategies/s1', 'db/users/u1/strategies/s2', 'db/users/u1']);
   assert.equal(result.strategiesDeleted, 2);
   assert.equal(firestore.docs.size, 0);
 });
@@ -47,7 +47,19 @@ test('cloud deletion is idempotent: a retry after success is a safe no-op', asyn
   await repository.deleteAccountData();
   const second = await repository.deleteAccountData();
   assert.equal(second.strategiesDeleted, 0);
-  assert.deepEqual(firestore.order.slice(3), ['db/users/u1']);
+  assert.deepEqual(firestore.order.slice(4), ['set:db/users/u1', 'db/users/u1']);
+});
+
+test('a marker failure stops deletion before any data is touched', async () => {
+  const firestore = makeFirestore();
+  firestore.api.setDoc = async () => { throw new Error('firestore unavailable'); };
+  const repository = makeRepository(firestore);
+  await assert.rejects(repository.deleteAccountData(), (error) => {
+    assert.equal(error.deletionStage, 'marker');
+    assert.equal(error.strategiesDeleted, 0);
+    return true;
+  });
+  assert.equal(firestore.docs.size, 3);
 });
 
 test('a strategies failure reports the stage and partial count, leaving the workspace intact', async () => {

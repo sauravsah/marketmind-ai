@@ -2,11 +2,27 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedInOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Once the owner marks their account for deletion, no client - any tab,
+    // any device, or a stale offline write - can create or update workspace
+    // data again. Reads and deletes stay allowed so cleanup can finish.
+    // The marker is written as the first deletion step and removed with the
+    // workspace document itself.
+    function deletionMarked(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.get('deleting', false) == true;
+    }
+
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, delete: if signedInOwner(userId);
+      allow create, update: if signedInOwner(userId) && !deletionMarked(userId);
 
       match /strategies/{strategyId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, delete: if signedInOwner(userId);
+        allow create, update: if signedInOwner(userId) && !deletionMarked(userId);
       }
     }
   }

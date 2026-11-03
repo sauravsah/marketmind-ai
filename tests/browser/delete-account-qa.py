@@ -37,7 +37,7 @@ export const doc=(parent,...s)=>({path:(parent.path||'db')+'/'+s.join('/')});
 export const collection=(parent,...s)=>({path:(parent.path||'db')+'/'+s.join('/')});
 export const getDoc=async r=>({exists:()=>store.has(r.path),data:()=>store.get(r.path)});
 export const getDocs=async r=>({docs:[...store.keys()].filter(k=>k.startsWith(r.path+'/')).map(k=>({ref:{path:k},data:()=>store.get(k)}))});
-export const setDoc=async(r,d)=>{store.set(r.path,{...(store.get(r.path)||{}),...d});};
+export const setDoc=async(r,d)=>{window.__calls.push('setDoc:'+r.path);store.set(r.path,{...(store.get(r.path)||{}),...d});};
 export const deleteDoc=async(r)=>{window.__calls.push('deleteDoc:'+r.path);store.delete(r.path);};
 '''
 checks={}
@@ -83,18 +83,18 @@ try:
   page.locator('#delete-account-password').fill('correct-password')
   page.locator('#delete-account-confirm').fill('DELETE')
   page.get_by_role('button',name='Permanently delete my account',exact=True).click()
-  page.get_by_text('were deleted.',exact=False).wait_for(timeout=8000)
+  page.get_by_text('cloud workspace data were deleted',exact=False).wait_for(timeout=8000)
   calls=page.evaluate('window.__calls')
-  checks['deletion_order']=calls==['reauthenticate','reauthenticate','deleteDoc:db/users/qa-delete/strategies/s1','deleteDoc:db/users/qa-delete/strategies/s2','deleteDoc:db/users/qa-delete','deleteUser']
+  checks['deletion_order']=calls==['reauthenticate','reauthenticate','setDoc:db/users/qa-delete','deleteDoc:db/users/qa-delete/strategies/s1','deleteDoc:db/users/qa-delete/strategies/s2','deleteDoc:db/users/qa-delete','deleteUser']
   checks['local_copy_removed']=page.evaluate("Object.keys(localStorage).filter(k=>k.includes('qa-delete')).length")==0
-  checks['signed_out_confirmation']=page.locator('body').inner_text().find('were deleted.')>=0
+  checks['signed_out_confirmation']=page.locator('body').inner_text().find('cloud workspace data were deleted')>=0
   page.screenshot(path=f'{OUT}/delete-done-1280.png')
   checks['no_page_errors']=not errors
   checks['no_analytics']=not external
 
   # Mobile 390: dialog fits without horizontal overflow, wrong-password tall
   # state keeps the confirm field and delete button reachable.
-  m=b.new_page(viewport={'width':390,'height':844},reduced_motion='reduce')
+  m=b.new_page(viewport={'width':390,'height':844},reduced_motion='reduce',has_touch=True)
   m.route('**/*',lambda r:r.abort() if '/api/' in r.request.url or 'analytics' in r.request.url or 'googletagmanager' in r.request.url else r.continue_())
   m.route('**/api/public-runtime-config',lambda r:r.fulfill(status=200,content_type='application/json',body=CONFIG))
   m.route('**/firebasejs/**/firebase-app.js',lambda r:r.fulfill(status=200,content_type='text/javascript',body=APP_STUB))
@@ -113,7 +113,16 @@ try:
   btn.scroll_into_view_if_needed()
   checks['mobile_confirm_button_reachable']=btn.is_visible()
   checks['mobile_error_visible']=m.get_by_text('Nothing was deleted.',exact=False).is_visible()
-  m.screenshot(path=f'{OUT}/delete-dialog-wrong-password-390.png',full_page=True)
+  m.screenshot(path=f'{OUT}/delete-dialog-wrong-password-390.png')
+  # Keyboard-open approximation: focus the confirm field and shrink the
+  # viewport; the dialog must keep the button reachable via its own scroll.
+  m.locator('#delete-account-confirm').tap()
+  checks['mobile_confirm_focused']=m.evaluate('document.activeElement&&document.activeElement.id')=='delete-account-confirm'
+  m.set_viewport_size({'width':390,'height':430})
+  m.wait_for_timeout(400)
+  btn.scroll_into_view_if_needed()
+  checks['mobile_keyboard_button_reachable']=btn.is_visible()
+  m.screenshot(path=f'{OUT}/delete-dialog-keyboard-390.png')
   m.close()
   b.close()
 finally:
