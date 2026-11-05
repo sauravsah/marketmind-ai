@@ -44,6 +44,14 @@ const USAGE_EVIDENCE_PATTERN = /\b(?:redeemed|(?:shoppers|customers|users|member
 const AWARENESS_CLAIM_PATTERN = /\b(?:consumers?|shoppers?|users?|buyers?|customers?|audiences?|people|they)\s+(?:are\s+|were\s+)?aware of\b/i;
 const AWARENESS_EVIDENCE_PATTERN = /\b(?:aware|familiar with|recogni[sz]e[sd]?|heard of|recall)\b/i;
 
+// Pilot regression: content/offer existence cannot establish readership or usage.
+// Narrow demotions only; this is not a general claim-support verifier.
+const GUIDE_READING_CLAIM = /\b(?:consult|read|use|follow)(?:s|ed|ing)?\s+(?:\w+\s+){0,3}guides?\b/i;
+const SERVICE_USAGE_CLAIM = /\b(?:businesses|buyers|retailers|importers)\s+(?:source|import|buy|purchase)(?:s|d)?\b/i;
+const GUIDE_OFFER_TEXT = /\b(?:guide|learn about|how to)\b/i;
+const SERVICE_OFFER_TEXT = /\b(?:we help|help .{0,50}(?:source|import)|services?|connects? .{0,60}brands)\b/i;
+const REPORTED_BEHAVIOR = /\b(?:survey|interviews?|respondents?|reported|participants?|customers? (?:have|who)|buyers (?:have|who)|importers (?:have|who)|I (?:have |consulted|read|used|imported|purchased))\b/i;
+
 const OFFER_PATTERN = /\b\d{1,2}\s?%\s*(?:off|discount)\b|\bsave\s?\d{1,2}\s?%|\bsavings\b|\bdiscounts?\b|\bpromo(?:tion|tional|tions)?\b|\bcoupons?\b|\bvouchers?\b|\bfree (?:shipping|delivery|returns?|exchanges?|trials?)\b|\boffer\b|\bdeals?\b/i;
 const GLOBAL_MARKET_PATTERN = /\b(global(?:ly)?|worldwide|international(?:ly)?|all (?:markets|countries|regions))\b/i;
 // Text-bearing copy/instruction fields checked for existence-framed offer
@@ -223,6 +231,21 @@ function reviewClaim(field, claim, sources, now, adjustments, flags, context = {
     if (claim.evidenceType === 'observed' && OFFER_PATTERN.test(statement) && OFFER_USAGE_PATTERN.test(statement) && !USAGE_EVIDENCE_PATTERN.test(excerpts)) {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'behavior-inferred-from-offer', detail: 'offer existence is not observed redemption' });
       claim.evidenceType = 'inferred';
+    }
+    if (claim.evidenceType === 'observed' && /^observedBehaviors\[/.test(field)) {
+      const cited = (sources || []).filter(source => (claim.sourceIds || []).includes(source.id));
+      const contentOnly = (pattern) => cited.length && cited.every(source => {
+        const text = normalizeForMatch(`${source.title || ''} ${source.snippet || ''}`);
+        return pattern.test(text) && !REPORTED_BEHAVIOR.test(text);
+      });
+      const reason = GUIDE_READING_CLAIM.test(statement) && contentOnly(GUIDE_OFFER_TEXT)
+        ? 'readership-inferred-from-guide'
+        : SERVICE_USAGE_CLAIM.test(statement) && contentOnly(SERVICE_OFFER_TEXT)
+          ? 'usage-inferred-from-service' : '';
+      if (reason) {
+        adjustments.push({ field, from: 'observed', to: 'inferred', reason, detail: 'a guide or service offer does not establish audience behavior' });
+        claim.evidenceType = 'inferred';
+      }
     }
     if (claim.evidenceType === 'observed' && AWARENESS_CLAIM_PATTERN.test(statement) && !AWARENESS_EVIDENCE_PATTERN.test(excerpts)) {
       adjustments.push({ field, from: 'observed', to: 'inferred', reason: 'awareness-inferred-from-content', detail: 'content existence is not observed awareness' });
@@ -404,7 +427,10 @@ export function applyResearchConsistency(research, sources = [], now = new Date(
   const adjustments = [];
   const flags = [];
   if (typeof research.researchSummary === 'string' && research.researchSummary.trim()) {
-    reviewClaim('researchSummary', { statement: research.researchSummary, sourceIds: (sources || []).map((source) => source.id) }, sources, now, adjustments, flags, context);
+    // A future forecast in one sentence must not excuse a past event in another.
+    for (const statement of sentenceList(research.researchSummary)) {
+      reviewClaim('researchSummary', { statement, sourceIds: (sources || []).map((source) => source.id) }, sources, now, adjustments, flags, context);
+    }
     reviewAttribution('researchSummary', research.researchSummary, sources, now, flags);
   }
   research.meta = { ...(research.meta || {}) };

@@ -16,10 +16,12 @@ export function buildResearchSynthesisPrompt(context, sources, packetBudget) {
       'Every factual signal must include one or more sourceIds from the supplied packet.',
       'Separate evidence from MarketMind interpretation and state uncertainty explicitly.',
       ...EVIDENCE_DISCIPLINE_RULES,
+      'Use analysisDate as today when evaluating event timing; a forecast in another sentence does not make a past event upcoming.',
       'If evidence is insufficient, say "Insufficient evidence" rather than guessing.',
       'Return valid JSON only. Do not wrap JSON in markdown.',
     ].join(' '),
     user: JSON.stringify({
+      analysisDate: (context?.now instanceof Date ? context.now : new Date()).toISOString().slice(0, 10),
       strategyContext: {
         brand: value(context.brand?.name),
         industry: value(context.brand?.industry),

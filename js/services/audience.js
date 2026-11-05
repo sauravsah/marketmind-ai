@@ -85,7 +85,7 @@ export function validateAudienceProfile(candidate, sources = [], options = {}) {
   const sourceIds = sources.map((source) => source.id).filter(Boolean);
   profile.summary = clean(candidate?.summary);
   profile.segments = normalizeCollection(candidate?.segments, sourceIds, '', 'segments');
-  profile.observedBehaviors = normalizeCollection(candidate?.observedBehaviors, sourceIds, 'observed', 'observedBehaviors');
+  profile.observedBehaviors = normalizeCollection(candidate?.observedBehaviors, sourceIds, '', 'observedBehaviors');
   for (const key of ITEM_KEYS.filter((itemKey) => !['segments', 'observedBehaviors', 'hypotheses', 'uncertainties'].includes(itemKey))) profile[key] = normalizeCollection(candidate?.[key], sourceIds, '', key);
   profile.hypotheses = normalizeCollection(candidate?.hypotheses, sourceIds, 'hypothesis', 'hypotheses');
   profile.uncertainties = normalizeCollection(candidate?.uncertainties, sourceIds, 'unknown', 'uncertainties');
@@ -102,7 +102,7 @@ export function calculateEvidenceCoverage(research, profile) {
   const withReview = (coverage) => ({ ...coverage, reviewedCount: review.reviewedCount, reviewCoveragePercent: review.reviewCoveragePercent, radarReadyCount: review.radarReadyCount });
   if (!sourceCount || !research?.meta?.researchedAt) return withReview({ level: 'limited', reason: 'Based primarily on strategy context and general reasoning, not live market evidence.', sourceCount, coveredInsightCount: mappedInsightCount });
   const ratio = claimCount ? mappedInsightCount / claimCount : 0;
-  if (sourceCount >= 5 && ratio >= 0.7) return withReview({ level: 'strong', reason: 'Most evidence-backed audience claims are mapped to current research sources.', sourceCount, coveredInsightCount: mappedInsightCount });
+  if (sourceCount >= 5 && ratio >= 0.7) return withReview({ level: 'strong', reason: 'Most audience claims have mapped citations. Citation coverage does not verify that the sources support them.', sourceCount, coveredInsightCount: mappedInsightCount });
   if (mappedInsightCount) return withReview({ level: 'moderate', reason: 'Some audience claims are mapped to current research sources; hypotheses and unknowns remain.', sourceCount, coveredInsightCount: mappedInsightCount });
   return withReview({ level: 'limited', reason: 'Research is available, but it did not support a mapped audience claim.', sourceCount, coveredInsightCount: 0 });
 }

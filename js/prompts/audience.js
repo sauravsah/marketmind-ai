@@ -31,6 +31,7 @@ export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behav
       'Never stereotype people by age, geography, occupation, identity, or life stage.',
       'Do not present a plausible marketing convention as an observation.',
       ...EVIDENCE_DISCIPLINE_RULES,
+      'Use analysisDate as today when evaluating event timing; a forecast in another sentence does not make a past event upcoming.',
       'Observed behavior means a source shows someone doing it; an offer, article, or product existing is not observed behavior - label it inferred.',
       'Every observed item must cite one or more sourceIds from the packet.',
       'Inferred items must be framed as interpretation from cited observations.',
@@ -40,6 +41,7 @@ export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behav
     ].join(' '),
     user: JSON.stringify({
       task: `Build an evidence-aware audience model focused on ${focus}.`,
+      analysisDate: (context?.now instanceof Date ? context.now : new Date()).toISOString().slice(0, 10),
       strategyContext: {
         brand: clean(context?.brand?.name),
         industry: clean(context?.brand?.industry),
