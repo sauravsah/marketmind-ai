@@ -986,7 +986,7 @@ function brandPage() {
       <form id="brand-form" class="brand-layout" novalidate>
         <div class="brand-main">
           <section class="form-card">${sectionEyebrow('01', 'BRAND FOUNDATIONS', 'The context behind the work.')}
-            <div class="form-grid"><div class="field"><label for="brand-name">Brand name <span class="required">*</span></label><input id="brand-name" name="name" maxlength="80" value="${escapeHtml(brand.name)}" placeholder="e.g. Nike"></div><div class="field"><label for="brand-industry">Industry / category</label><input id="brand-industry" name="industry" maxlength="80" value="${escapeHtml(brand.industry)}" placeholder="e.g. Sports & wellness"></div></div>
+            <div class="form-grid"><div class="field"><label for="brand-name">Brand name <span class="optional">OPTIONAL</span></label><input id="brand-name" name="name" maxlength="80" value="${escapeHtml(brand.name)}" placeholder="e.g. Nike"></div><div class="field"><label for="brand-industry">Industry / category</label><input id="brand-industry" name="industry" maxlength="80" value="${escapeHtml(brand.industry)}" placeholder="e.g. Sports & wellness"></div></div>
             <div class="field"><label for="brand-description">What does your brand do?</label><textarea id="brand-description" name="description" maxlength="400" rows="3" placeholder="Describe your product, the problem it solves, and why it matters...">${escapeHtml(brand.description)}</textarea><div class="field-meta"><span>Keep it clear and human.</span><span id="description-count">${brand.description.length} / 400</span></div></div>
             <div class="form-grid"><div class="field"><label for="brand-website">Website <span class="optional">OPTIONAL</span></label><input id="brand-website" name="website" type="url" value="${escapeHtml(brand.website)}" placeholder="https://yourbrand.com"></div><div class="field"><label for="brand-audience">Who is your audience?</label><input id="brand-audience" name="audience" maxlength="180" value="${escapeHtml(brand.audience)}" placeholder="e.g. Curious, time-poor urban professionals"></div></div>
           </section>
@@ -2423,7 +2423,7 @@ function updateVoicePreview() {
 
 function saveBrand() {
   const nextBrand = collectBrandForm();
-  if (!nextBrand.name && !nextBrand.description) { showToast('Add a brand name or description before saving.', 'error'); document.querySelector('#brand-name').focus(); return; }
+  // Empty profiles are valid workspace defaults and must remain clearable.
   state.brand = nextBrand; storage.saveBrand(state.brand); persistWorkspace(); showToast('Brand voice saved.', 'success'); render();
 }
 
