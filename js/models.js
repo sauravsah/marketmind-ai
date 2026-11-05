@@ -127,6 +127,9 @@ export function createDefaultStrategy() {
     competitors: [],
     researchDepth: 'balanced',
     brandId: 'local-brand',
+    // Brand Voice pinned to this strategy (null = use the workspace brand).
+    brandSnapshot: null,
+    brandPinnedAt: null,
     status: 'draft',
     createdAt: new Date().toISOString(),
     research: null,

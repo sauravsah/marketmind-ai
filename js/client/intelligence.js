@@ -31,13 +31,26 @@ function audienceItems(audience, knownIds) {
   return AUDIENCE_KEYS.flatMap((key) => Array.isArray(audience?.[key]) ? audience[key] : []).map((item) => sourceBackedItem(item, knownIds, item?.evidenceType || 'unknown')).filter(Boolean);
 }
 
+// One honest classification for a research run, reused by the journey
+// rail, dashboard, and intelligence assessment: a run that produced too few
+// sources or no synthesized signals is partial work in progress, never a
+// completed stage.
+export function researchStageStatus(research) {
+  const sources = Array.isArray(research?.sources) ? research.sources.filter((source) => source?.id && source?.url) : [];
+  if (!sources.length || !research?.meta?.researchedAt) return 'none';
+  const knownIds = new Set(sources.map((source) => source.id));
+  const signals = signalItems(research, knownIds);
+  return sources.length >= 3 && research.meta.aiStatus === 'verified' && signals.length ? 'complete' : 'partial';
+}
+
 export function assessIntelligence(context = {}) {
   const research = context.research || null;
   const audience = context.audience || null;
   const sources = Array.isArray(research?.sources) ? research.sources.filter((source) => source?.id && source?.url) : [];
   const knownIds = new Set(sources.map((source) => source.id));
   const researchSignals = signalItems(research, knownIds);
-  const researchStatus = sources.length && research?.meta?.researchedAt ? sources.length >= 3 && research.meta.aiStatus === 'verified' && researchSignals.length ? 'available' : 'limited' : 'missing';
+  const stageStatus = researchStageStatus(research);
+  const researchStatus = stageStatus === 'complete' ? 'available' : stageStatus === 'partial' ? 'limited' : 'missing';
   const allAudienceSignals = audienceItems(audience, knownIds);
   const eligibleAudienceSignals = getRadarEligibleAudienceItems(audience, research)
     .map((item) => sourceBackedItem(item, knownIds, item?.evidenceType || 'unknown'))

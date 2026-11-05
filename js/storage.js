@@ -37,7 +37,9 @@ export function createAccountStorage(getLocalStorage = () => window.localStorage
     saveStrategy(value) {
       if (!value?.id) return false;
       const existing = this.getStrategies();
-      return write(KEYS.strategies, [value, ...existing.filter(item => item.id !== value.id)].slice(0, 12));
+      // Local copy is a backup of the cloud workspace; keep enough history
+      // for repeat campaign work (cloud storage remains the source of truth).
+      return write(KEYS.strategies, [value, ...existing.filter(item => item.id !== value.id)].slice(0, 50));
     },
     getWorkspace(fallback = DEFAULT_WORKSPACE) { return { ...fallback, ...DEFAULT_WORKSPACE, ...read(KEYS.workspace, {}) }; },
     saveWorkspace(value) { return write(KEYS.workspace, { ...DEFAULT_WORKSPACE, ...value }); },

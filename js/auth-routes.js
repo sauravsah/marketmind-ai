@@ -1,5 +1,5 @@
 export const PUBLIC_ROUTES = new Set(['landing', 'sign-in', 'sign-up', 'verify-email', 'forgot-password', 'reset-password']);
-export const PROTECTED_ROUTES = new Set(['dashboard', 'strategy', 'research', 'audience', 'radar', 'campaigns', 'brand', 'workspace']);
+export const PROTECTED_ROUTES = new Set(['dashboard', 'strategy', 'research', 'audience', 'radar', 'campaigns', 'history', 'brand', 'workspace']);
 
 export const LEGACY_ROUTE_MAP = {
   settings: 'workspace',
@@ -9,6 +9,7 @@ export const LEGACY_ROUTE_MAP = {
   audience: 'audience',
   radar: 'radar',
   campaigns: 'campaigns',
+  history: 'history',
   brand: 'brand',
   workspace: 'workspace',
   'sign-in': 'sign-in',
