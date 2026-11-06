@@ -11,6 +11,7 @@ export function researchReadinessIssues(research) {
   const flags = [...(research.meta?.claimFlags || []).filter(flag => flag.reason !== 'past-date-framed-as-upcoming'), ...(reviewed.meta?.claimFlags || [])];
   const uniqueFlags = flags.filter((flag, index) => flags.findIndex(other => other.field === flag.field && other.reason === flag.reason) === index);
   const issues = uniqueFlags.map(flag => ({ field: flag.field || 'research', reason: flag.reason || 'claim-consistency', detail: flag.detail || '' }));
+  if (research.evidenceAudit && !research.evidenceAudit.acceptedSignalCount) issues.push({ field: 'research', reason: 'insufficient-packet-evidence', detail: 'No candidate met the packet provenance contract; review the sources.' });
   const inspect = (field, text) => {
     if (REDACTED_FIGURE.test(String(text || ''))) issues.push({ field, reason: 'redacted-numeric-placeholder', detail: 'A redacted number is not a usable factual figure.' });
   };

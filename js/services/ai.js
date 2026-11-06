@@ -243,8 +243,13 @@ function callOptionsFrom(config, options, { temperature, maxTokens }) {
 export async function synthesizeResearch(context, sources, config, options = {}) {
   if (!config?.apiKey) return { candidate: null, status: 'not-configured', warning: AI_RESEARCH_UNAVAILABLE };
   try {
-    const candidate = await requestStructuredJson(config, (packetBudget) => buildResearchSynthesisPrompt(context, sources, packetBudget), callOptionsFrom(config, options, { temperature: 0.1, maxTokens: DEFAULT_MAX_OUTPUT_TOKENS }));
-    return { candidate, status: 'verified', warning: null };
+    let evidenceContract;
+    const candidate = await requestStructuredJson(config, (packetBudget) => {
+      const prompt = buildResearchSynthesisPrompt(context, sources, packetBudget);
+      evidenceContract = prompt.evidenceContract;
+      return prompt;
+    }, callOptionsFrom(config, options, { temperature: 0.1, maxTokens: DEFAULT_MAX_OUTPUT_TOKENS }));
+    return { candidate, evidenceContract, status: 'verified', warning: null };
   } catch (error) {
     return { candidate: null, status: 'failed', warning: AI_UNAVAILABLE, reason: error?.reason || 'unknown' };
   }

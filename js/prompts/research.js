@@ -1,4 +1,5 @@
-import { boundSourcePacket, boundStringList } from './budget.js';
+import { selectResearchEvidence } from '../research-evidence.js';
+import { boundStringList } from './budget.js';
 import { EVIDENCE_DISCIPLINE_RULES } from './evidence-rules.js';
 
 function value(input) {
@@ -6,13 +7,16 @@ function value(input) {
 }
 
 export function buildResearchSynthesisPrompt(context, sources, packetBudget) {
-  const sourcePacket = boundSourcePacket(sources, packetBudget);
+  const evidenceContract = selectResearchEvidence(sources, packetBudget);
+  const sourcePacket = evidenceContract.packet;
 
   return {
     system: [
       'You are MarketMind, a careful marketing intelligence analyst.',
       'Synthesize only the evidence supplied in the source packet.',
       'Never invent sources, URLs, dates, statistics, quotes, or current events.',
+      'Write an explicitly provisional analyst draft. Matching quotes establishes provenance only, not semantic support. Do not infer buyer behavior from company offers, guides or consumer category context.',
+      'Each signal must include evidence: [{sourceId, quote}]. Copy quote exactly from evidenceSpans. Offer context is not buyer behavior. Return empty arrays when evidence is insufficient.',
       'Every factual signal must include one or more sourceIds from the supplied packet.',
       'Separate evidence from MarketMind interpretation and state uncertainty explicitly.',
       ...EVIDENCE_DISCIPLINE_RULES,
@@ -20,6 +24,7 @@ export function buildResearchSynthesisPrompt(context, sources, packetBudget) {
       'If evidence is insufficient, say "Insufficient evidence" rather than guessing.',
       'Return valid JSON only. Do not wrap JSON in markdown.',
     ].join(' '),
+    evidenceContract,
     user: JSON.stringify({
       analysisDate: (context?.now instanceof Date ? context.now : new Date()).toISOString().slice(0, 10),
       strategyContext: {
@@ -45,7 +50,9 @@ export function buildResearchSynthesisPrompt(context, sources, packetBudget) {
         emergingThemes: 'array',
         contradictions: 'array',
       },
+      evidenceLimitations: evidenceContract.limitations,
       signalShape: {
+        evidence: [{ sourceId: 'packet ID', quote: 'one exact complete evidenceSpan' }],
         title: 'string',
         summary: 'evidence-grounded summary',
         type: 'news|audience|industry|culture|competitor|technology|events',

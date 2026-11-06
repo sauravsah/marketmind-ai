@@ -55,6 +55,7 @@ export function buildBehavioralSynthesisPrompt(context, evidence, focus = 'behav
         competitors: boundStringList(context?.strategy?.competitors),
       },
       audienceScope: context?.audienceScope || {},
+      researchDraftLimitations: context?.research?.evidenceAudit ? { audienceEvidence: context.research.evidenceAudit.audienceEvidence, status: 'Research draft; provenance is not support verification. When buyer evidence is insufficient, use inference, hypothesis or unknown, never observed target-buyer behavior.' } : null,
       evidencePacket: sourcePacket(evidence, packetBudget),
     }, null, 2),
   };

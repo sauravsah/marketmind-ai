@@ -90,6 +90,12 @@ export function validateAudienceProfile(candidate, sources = [], options = {}) {
   for (const key of ITEM_KEYS.filter((itemKey) => !['segments', 'observedBehaviors', 'hypotheses', 'uncertainties'].includes(itemKey))) profile[key] = normalizeCollection(candidate?.[key], sourceIds, '', key);
   profile.hypotheses = normalizeCollection(candidate?.hypotheses, sourceIds, 'hypothesis', 'hypotheses');
   profile.uncertainties = normalizeCollection(candidate?.uncertainties, sourceIds, 'unknown', 'uncertainties');
+  if (options.research?.evidenceAudit) {
+    for (const key of ITEM_KEYS) for (const item of profile[key]) {
+      if (item.evidenceType === 'observed') { item.evidenceType = 'inferred'; item.confidence = 'low'; item.reviewNote = 'The packet has not verified that reported behavior belongs to the target buyers; review this inference.'; }
+    }
+    if (options.research.evidenceAudit.audienceEvidence === 'insufficient') profile.uncertainties.push(ensureAudienceClaimMetadata({ statement: 'The research packet did not establish reported behavior by the target buyers. Company offers and category context do not fill this gap.', evidenceType: 'unknown', sourceIds: [], confidence: 'low', validationMethod: 'Review target-buyer interviews or survey evidence before approving behavior claims.' }, 'uncertainties'));
+  }
   profile.evidenceCoverage = calculateEvidenceCoverage(options.research || null, profile);
   return profile;
 }
@@ -168,7 +174,8 @@ export async function analyzeAudience(context, configs = {}, options = {}) {
   }
 
   const callStats = {};
-  const synthesis = await synthesizeAudience({ ...context, research: context.research }, evidence.sources, configs.ai, { ...options, callStats });
+  const synthesisSources = context.research?.evidenceAudit?.packet || evidence.sources;
+  const synthesis = await synthesizeAudience({ ...context, research: context.research }, synthesisSources, configs.ai, { ...options, callStats });
   stage(onStage, 4);
   if (!synthesis.candidate) {
     const failed = unavailableProfile(context, context.research, synthesis.warning || 'Audience synthesis failed.');

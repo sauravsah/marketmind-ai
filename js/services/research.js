@@ -1,3 +1,4 @@
+import { selectResearchEvidence, validateResearchEvidence } from '../research-evidence.js';
 import { synthesizeResearch } from './ai.js';
 import { applyResearchConsistency } from './claim-consistency.js';
 import { createEmptyResearch } from '../models.js';
@@ -217,6 +218,7 @@ function cleanSignal(raw, sourcesById) {
     confidence: ['low', 'medium', 'high'].includes(raw.confidence) ? raw.confidence : 'low',
     interpretation: clean(raw.interpretation),
     sourceIds,
+    ...(Array.isArray(raw.evidence) ? { evidence: raw.evidence } : {}),
   };
 }
 
@@ -227,7 +229,9 @@ function cleanGroupedItems(items, sourcesById, fallbackKeys = ['title', 'summary
   });
 }
 
-export function validateResearchOutput(candidate, sources) {
+export function validateResearchOutput(candidate, sources, evidenceContract) {
+  const validated = evidenceContract ? validateResearchEvidence(candidate, evidenceContract) : null;
+  if (validated) candidate = validated;
   const sourcesById = new Map(sources.map((source) => [source.id, source]));
   const keys = ['marketSignals', 'audienceSignals', 'industryDevelopments', 'culturalSignals', 'competitorSignals', 'events', 'technologySignals'];
   const output = createEmptyResearch();
@@ -236,6 +240,7 @@ export function validateResearchOutput(candidate, sources) {
   output.emergingThemes = cleanGroupedItems(candidate?.emergingThemes, sourcesById).map((item) => ({ title: item.title, summary: item.summary, confidence: item.confidence, sourceIds: item.sourceIds }));
   output.contradictions = cleanGroupedItems(candidate?.contradictions, sourcesById).map((item) => ({ title: item.title, summary: item.summary, confidence: item.confidence, sourceIds: item.sourceIds }));
   output.sources = sources;
+  if (validated) output.evidenceAudit = validated.evidenceAudit;
   return output;
 }
 
@@ -287,7 +292,8 @@ export async function researchMarket(context, configs = {}, options = {}) {
 
   onStage({ id: 'synthesizing', label: 'Synthesizing findings', sources: sources.length });
   const callStats = {};
-  const synthesis = await synthesizeResearch(context, sources, configs.ai, { ...options, callStats });
+  const initialEvidence = selectResearchEvidence(sources);
+  const synthesis = initialEvidence.packet.length ? await synthesizeResearch(context, sources, configs.ai, { ...options, callStats }) : { candidate: {}, evidenceContract: initialEvidence, status: 'not-attempted' };
   if (!synthesis.candidate) {
     const failed = sourceOnlyOutput(sources, depth, queries.length, 'verified', synthesis.status, [synthesis.warning].filter(Boolean), searchResult.failures);
     failed.meta.failureReason = synthesis.reason || 'unknown';
@@ -296,12 +302,12 @@ export async function researchMarket(context, configs = {}, options = {}) {
     return failed;
   }
 
-  const output = validateResearchOutput(synthesis.candidate, sources);
+  const output = validateResearchOutput(synthesis.candidate, sources, synthesis.evidenceContract);
   const usedSourceIds = new Set(allSignals(output).flatMap((signal) => signal.sourceIds));
   output.meta = { ...output.meta, researchedAt: new Date().toISOString(), depth, queryCount: queries.length, sourcesReviewed: sources.length, sourcesUsed: usedSourceIds.size, providerStatus: 'verified', aiStatus: synthesis.status, providerCalls: callStats, searchCalls, warnings: [], failures: searchResult.failures };
   applyResearchConsistency(output, sources, options.now instanceof Date ? options.now : new Date(), { market: context?.strategy?.market });
   output.sources = sources;
-  onStage({ id: 'complete', label: 'Research ready', signals: allSignals(output).length });
+  onStage({ id: 'complete', label: output.evidenceAudit ? 'Evidence excerpts prepared' : 'Research ready', signals: allSignals(output).length });
   return output;
 }
 
