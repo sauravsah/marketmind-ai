@@ -1977,3 +1977,12 @@ html { color-scheme: dark; }
   .history-page .page-header { flex-direction: column; align-items: flex-start; gap: 14px; }
   .history-row-item .strategy-date { display: none; }
 }
+
+/* Source interaction states must keep the active theme's contrast. */
+.source-row:is(:hover, :focus-visible, :active, [aria-pressed="true"]) {
+  background: var(--surface-secondary);
+}
+.source-row:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
+}

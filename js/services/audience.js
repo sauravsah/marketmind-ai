@@ -1,3 +1,4 @@
+import { assertResearchReadyForAnalysis } from '../research-readiness.js';
 import { synthesizeAudience } from './ai.js';
 import { createEmptyAudienceProfile } from '../models.js';
 import { validateAudienceEvidence as validateItemEvidence } from '../prompts/audience.js';
@@ -147,6 +148,7 @@ function unavailableProfile(context, research, warning) {
 }
 
 export async function analyzeAudience(context, configs = {}, options = {}) {
+  assertResearchReadyForAnalysis(context?.research);
   const onStage = options.onStage || (() => {});
   stage(onStage, 0);
   const evidence = prepareAudienceEvidence(context);

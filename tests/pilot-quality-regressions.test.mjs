@@ -40,3 +40,21 @@ test('future event in the same sentence remains future and not flagged',()=>{
  applyResearchConsistency(research,[{id:'expo',snippet:'The prior expo ran in October 2026; next edition in March 2027.'}],now);
  assert.equal(research.meta.claimFlags,undefined);
 });
+test('summary event dates exclude unrelated historical market figures',()=>{
+ const research={researchSummary:'Upcoming K-Beauty Expo Korea provides networking opportunities.',meta:{}};
+ applyResearchConsistency(research,[{id:'market',title:'Beauty market growth',snippet:'Market revenues grew in 2018, 2022, 2016 and 2025.'},{id:'expo',title:'K-Beauty Expo Korea',snippet:'K-Beauty Expo Korea runs 15th - 17th October 2026.'}],now);
+ const flag=research.meta.claimFlags.find(f=>f.reason==='past-date-framed-as-upcoming');assert.equal(flag.datedMaterial,'October 2026');
+});
+test('undated upcoming event does not borrow unrelated historical market dates',()=>{
+ const research={researchSummary:'The upcoming K-Beauty Expo Korea provides networking opportunities.',meta:{}};
+ applyResearchConsistency(research,[{id:'market',title:'Beauty market',snippet:'Revenues reached USD 10 million in 2022.'},{id:'expo',title:'K-Beauty Expo Korea',snippet:'See our event program.'}],now);
+ assert.equal(research.meta.claimFlags,undefined);
+});
+test('future expo is not blocked by a past unrelated expo in the same source set',()=>{
+ const research={researchSummary:'Upcoming K-Beauty Expo Korea runs in March 2027.',meta:{}};
+ applyResearchConsistency(research,[{id:'old',title:'Food Expo',snippet:'Food Expo ran in October 2026.'}],now);assert.equal(research.meta.claimFlags,undefined);
+});
+test('same category expo in another location does not donate its past date',()=>{
+ const research={researchSummary:'Upcoming K-Beauty Expo Korea provides networking opportunities.',meta:{}};
+ applyResearchConsistency(research,[{id:'delhi',title:'K-Beauty Expo Delhi',snippet:'K-Beauty Expo Delhi took place in 2024.'}],now);assert.equal(research.meta.claimFlags,undefined);
+});

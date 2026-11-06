@@ -1,0 +1,36 @@
+{
+  "researchSummary": "Forecasts reach USD 872 million by 2032. Upcoming industry events such as the 2026 K-Beauty Expo Korea provide networking opportunities.",
+  "sources": [
+    {
+      "id": "expo",
+      "title": "K-Beauty Expo Korea",
+      "url": "https://example.test/expo",
+      "snippet": "K-Beauty Expo Korea runs 15th - 17th October 2026."
+    },
+    {
+      "id": "market",
+      "title": "Category forecast",
+      "url": "https://example.test/market",
+      "snippet": "Revenue in 2022 was redacted. Forecast USD 872 million by 2032."
+    },
+    {
+      "id": "other",
+      "title": "Other context",
+      "url": "https://example.test/context",
+      "snippet": "Category context."
+    }
+  ],
+  "marketSignals": [
+    {
+      "title": "Revenue baseline",
+      "summary": "Revenue reached approximately *** million USD.",
+      "sourceIds": [
+        "market"
+      ]
+    }
+  ],
+  "meta": {
+    "aiStatus": "verified",
+    "researchedAt": "2026-11-06T00:00:00Z"
+  }
+}

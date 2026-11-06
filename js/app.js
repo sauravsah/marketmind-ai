@@ -1,3 +1,4 @@
+import { researchNeedsReview, researchReadinessIssues } from './research-readiness.js';
 import {
   AUDIENCE_DEPTH_OPTIONS,
   CAMPAIGN_OBJECTIVES,
@@ -796,6 +797,7 @@ function journeyState() {
   const hasBrief = Boolean(strategy.idea?.trim() && strategy.market?.trim());
   const researchStatus = researchStageStatus(strategy.research);
   const hasResearch = researchStatus === 'complete';
+  const qualityBlocked = researchNeedsReview(strategy.research);
   const researchPartial = researchStatus === 'partial';
   const hasAudience = Boolean(strategy.audienceInsights);
   const hasReviewedAudience = getRadarEligibleAudienceItems(strategy.audienceInsights, strategy.research).length > 0;
@@ -806,9 +808,9 @@ function journeyState() {
   return [
     { unlocked: true, complete: hasBrief, needsReview: false },
     { unlocked: hasBrief, complete: hasResearch, needsReview: researchPartial || (hasResearch && review.research) },
-    { unlocked: hasBrief, complete: hasAudience, needsReview: hasAudience && review.audience },
-    { unlocked: hasReviewedAudience, complete: radarComplete, needsReview: radarComplete && review.radar },
-    { unlocked: hasOpportunity, complete: hasCampaign, needsReview: hasCampaign && review.campaign },
+    { unlocked: hasBrief && !qualityBlocked, complete: hasAudience, needsReview: hasAudience && (review.audience || qualityBlocked) },
+    { unlocked: hasReviewedAudience && !qualityBlocked, complete: radarComplete, needsReview: radarComplete && (review.radar || qualityBlocked) },
+    { unlocked: hasOpportunity && !qualityBlocked, complete: hasCampaign, needsReview: hasCampaign && (review.campaign || qualityBlocked) },
   ];
 }
 
@@ -1054,8 +1056,14 @@ function researchUnavailablePage(research) {
   return `<div class="research-page page-entrance"><div class="page-header research-header"><div><div class="eyebrow">MARKET INTELLIGENCE · ${escapeHtml(capitalize(state.strategy.researchDepth || 'balanced'))} DEPTH</div><h1>Here's what could<br><em>happen next.</em></h1><p>We have the strategy context. Live evidence is not available yet, so MarketMind will not invent market signals.</p></div><div class="research-header-actions"><button class="button button-secondary" type="button" data-route="strategy">Edit strategy</button><button class="button button-primary" type="button" data-route="audience">${icon('message', 16)} Understand audience</button></div></div><section class="research-unavailable"><div class="unavailable-icon">${icon('radar', 21)}</div><div><div class="eyebrow">LIVE RESEARCH UNAVAILABLE</div><h2>${escapeHtml(warning)}</h2><p>MarketMind could not connect to live market intelligence right now. You can still build a clearly labelled research-light audience model from the strategy context.</p><div class="unavailable-actions"><button class="text-button" type="button" data-route="workspace">Open workspace ${icon('arrow', 15)}</button><button class="text-button" type="button" data-route="audience">Proceed with limited context ${icon('arrow', 15)}</button></div></div></section>${researchRunHistorySection(research)}${researchHistorySection()}</div>`;
 }
 
+function researchReviewPage(research) {
+  const issues = researchReadinessIssues(research);
+  return `<div class="research-page page-entrance"><div class="page-header"><div><div class="eyebrow">MARKET INTELLIGENCE · NEEDS REVIEW</div><h1>Sources collected.<br><em>Synthesis paused.</em></h1><p>This run has quality flags. It is not ready for downstream analysis. Original output is preserved below for review, not presented as a usable market summary.</p></div></div><section class="form-card"><h2>Why this run is paused</h2><ul>${issues.map(issue => `<li>${escapeHtml(issue.reason === 'past-date-framed-as-upcoming' ? 'The summary describes a past event as upcoming.' : issue.reason === 'redacted-numeric-placeholder' ? 'A generated claim contains a hidden number, not a usable figure.' : 'A generated claim needs a source review.')}<details><summary>Details</summary><p>${escapeHtml(issue.field)}: ${escapeHtml(issue.reason)}. ${escapeHtml(issue.detail)}</p></details></li>`).join('')}</ul><p>Review the cited sources. A new research run without these flags is required before continuing; that still does not verify claim support. Refreshing research uses provider credits; nothing reruns automatically.</p><button class="button button-secondary" type="button" data-action="refresh-research">Refresh research</button></section><section class="sources-section"><div class="eyebrow">SOURCE-ONLY VIEW</div><h2>Evidence to inspect.</h2><p>Search excerpts are not verified facts. Open the original source before relying on a claim.</p><div class="source-grid">${(research.sources || []).map(sourceRow).join('')}</div></section><details class="form-card"><summary>Original synthesis - not cleared for use</summary><p>${escapeHtml(research.researchSummary || 'No summary returned.')}</p>${allResearchSignals(research).map(signal => `<article><h3>${escapeHtml(signal.title)}</h3><p>${escapeHtml(signal.summary)}</p>${signal.interpretation ? `<p>${escapeHtml(signal.interpretation)}</p>` : ''}</article>`).join('')}${['emergingThemes', 'contradictions'].map(key => (research[key] || []).map(item => `<article><h3>${escapeHtml(item.title || key)}</h3><p>${escapeHtml(item.summary || item)}</p></article>`).join('')).join('')}</details>${researchRunHistorySection(research)}${researchHistorySection()}${state.selectedSource ? sourceModal(state.selectedSource, research.sources) : ''}</div>`;
+}
+
 function researchResultsPage() {
   const research = currentResearch();
+  if (researchNeedsReview(research)) return researchReviewPage(research);
   const signals = filteredSignals(research);
   const all = allResearchSignals(research);
   const metricData = [
@@ -1551,7 +1559,7 @@ function researchIntegrityNote(research) {
 function researchRunHistorySection(research) {
   const runs = Array.isArray(research.runs) ? [...research.runs].reverse() : [];
   if (!runs.length) return '';
-  return `<section class="research-run-history"><div class="signals-heading"><div><div class="eyebrow">RESEARCH RUNS</div><h2>Keep the trail.</h2></div><div class="signal-count">${runs.length} retained</div></div><p class="research-run-note">Previous snapshots stay attached to this strategy so a rerun can be reviewed against the moment it was captured.</p><div class="research-run-list">${runs.map((run) => `<article class="research-run ${researchRunIsCurrent(run, research) ? 'current' : ''}"><div><strong>${researchRunIsCurrent(run, research) ? 'Active snapshot' : 'Archived snapshot'}</strong><span>${run.researchedAt ? escapeHtml(formatDateTime(run.researchedAt)) : 'Timestamp unavailable'} · ${escapeHtml(capitalize(run.depth || 'balanced'))} depth</span></div><div><span>${Number(run.sourceCount || 0)} sources · ${Number(run.signalCount || 0)} signals</span><small>${escapeHtml(capitalize(run.aiStatus || 'unknown'))} synthesis · ${escapeHtml(capitalize(run.providerStatus || 'unknown'))} provider</small></div></article>`).join('')}</div></section>`;
+  return `<section class="research-run-history"><div class="signals-heading"><div><div class="eyebrow">RESEARCH RUNS</div><h2>Keep the trail.</h2></div><div class="signal-count">${runs.length} retained</div></div><p class="research-run-note">Previous snapshots stay attached to this strategy so a rerun can be reviewed against the moment it was captured.</p><div class="research-run-list">${runs.map((run) => `<article class="research-run ${researchRunIsCurrent(run, research) ? 'current' : ''}"><div><strong>${researchRunIsCurrent(run, research) ? 'Active snapshot' : 'Archived snapshot'}</strong><span>${run.researchedAt ? escapeHtml(formatDateTime(run.researchedAt)) : 'Timestamp unavailable'} · ${escapeHtml(capitalize(run.depth || 'balanced'))} depth</span></div><div><span>${Number(run.sourceCount || 0)} sources · ${Number(run.signalCount || 0)} signals</span><small>${researchNeedsReview(run.snapshot) ? 'Needs review' : escapeHtml(capitalize(run.aiStatus || 'unknown'))} synthesis · ${escapeHtml(capitalize(run.providerStatus || 'unknown'))} provider</small></div></article>`).join('')}</div></section>`;
 }
 
 function researchHistorySection() {
@@ -1665,7 +1673,7 @@ async function startResearch() {
     persistStrategy(state.strategy);
     state.researchRun = null;
     render();
-    showToast(result.sources?.length ? 'Research completed. Review the evidence trail.' : result.meta?.warnings?.[0] || 'Live market research is temporarily unavailable. Try again shortly.', result.sources?.length ? 'success' : 'info');
+    showToast(researchNeedsReview(result) ? 'Research needs review. Downstream analysis is paused.' : result.sources?.length ? 'Research completed. Review the evidence trail.' : result.meta?.warnings?.[0] || 'Live market research is temporarily unavailable. Try again shortly.', result.sources?.length && !researchNeedsReview(result) ? 'success' : 'info');
   } catch (error) {
     if (isAbortError(error) || !isCurrentRequest(requestController)) return;
     const failed = createEmptyResearch();
@@ -1721,6 +1729,7 @@ async function responseErrorMessage(response, fallback) {
 async function startAudienceAnalysis() {
   if (!state.strategy?.idea) { navigate('strategy'); return; }
   if (!brandRunAllowed()) return;
+  if (researchNeedsReview(currentResearch())) { navigate('research'); showToast('Research needs review. Downstream analysis is paused.', 'info'); return; }
   const scope = collectAudienceScope();
   if (!scope.primaryAudience || !scope.market) {
     navigate('audience');
@@ -1796,6 +1805,7 @@ function selectedOpportunityLens() {
 async function startOpportunityAnalysis(lens = selectedOpportunityLens()) {
   if (!state.strategy?.idea) { navigate('strategy'); return; }
   if (!brandRunAllowed()) return;
+  if (researchNeedsReview(currentResearch())) { navigate('research'); showToast('Research needs review. Downstream analysis is paused.', 'info'); return; }
   const readiness = currentOpportunityReadiness();
   if (readiness.bothMissing) { navigate('radar'); showToast('Research Market and Analyze Audience before opening the radar.', 'info'); return; }
   if (readiness.audienceEligibleCount === 0) { navigate('audience'); showToast('Review and validate at least one audience claim before opening the radar.', 'info'); return; }
@@ -1866,6 +1876,7 @@ function updateCampaignProgress(stage) {
 async function startCampaignStrategy(section = 'all') {
   if (!state.strategy?.idea) { navigate('strategy'); return; }
   if (!brandRunAllowed()) return;
+  if (researchNeedsReview(currentResearch())) { navigate('research'); showToast('Research needs review. Downstream analysis is paused.', 'info'); return; }
   const opportunity = selectedOpportunity();
   if (!opportunity) { navigate('radar'); showToast('Select an opportunity before developing a campaign strategy.', 'info'); return; }
   state.selectedSource = null;

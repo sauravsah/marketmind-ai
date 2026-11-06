@@ -1,3 +1,4 @@
+import { assertResearchReadyForAnalysis } from '../research-readiness.js';
 import { synthesizeOpportunities } from './ai.js';
 import { getAudienceReviewSummary, getRadarEligibleAudienceItems } from '../audience-review.js';
 import { applyOpportunityConsistency } from './claim-consistency.js';
@@ -294,6 +295,7 @@ export function researchIsStale(timestamp, now = new Date(), thresholdDays = 30)
 }
 
 export async function identifyOpportunities(context, configs = {}, options = {}) {
+  assertResearchReadyForAnalysis(context?.research);
   const now = options.now instanceof Date ? options.now : new Date();
   const variation = Number.isFinite(Number(options.variation)) ? Math.max(0, Math.floor(Number(options.variation))) : 0;
   const onStage = options.onStage || (() => {});

@@ -1,3 +1,4 @@
+import { researchNeedsReview } from '../research-readiness.js';
 import { getAudienceReviewSummary, getRadarEligibleAudienceItems } from '../audience-review.js';
 
 const MARKET_KEYS = ['marketSignals', 'audienceSignals', 'industryDevelopments', 'culturalSignals', 'competitorSignals', 'events', 'technologySignals'];
@@ -38,6 +39,7 @@ function audienceItems(audience, knownIds) {
 export function researchStageStatus(research) {
   const sources = Array.isArray(research?.sources) ? research.sources.filter((source) => source?.id && source?.url) : [];
   if (!sources.length || !research?.meta?.researchedAt) return 'none';
+  if (researchNeedsReview(research)) return 'partial';
   const knownIds = new Set(sources.map((source) => source.id));
   const signals = signalItems(research, knownIds);
   return sources.length >= 3 && research.meta.aiStatus === 'verified' && signals.length ? 'complete' : 'partial';
@@ -107,7 +109,7 @@ export function journeyStageReview(strategy = {}, now = new Date()) {
   const radar = strategy?.opportunityRadar || null;
   const newer = (a, b) => Boolean(a && b && new Date(a).getTime() > new Date(b).getTime());
   return {
-    research: Boolean(researchedAt && researchIsStale(researchedAt, now)),
+    research: researchNeedsReview(research) || Boolean(researchedAt && researchIsStale(researchedAt, now)),
     audience: Boolean(audience && newer(researchedAt, audience.researchVersion)),
     radar: Boolean(radar && (radar.meta?.stale || newer(researchedAt, radar.researchTimestamp) || (radar.researchTimestamp && researchIsStale(radar.researchTimestamp, now)))),
     campaign: campaignFreshness(strategy, now).needsReview,

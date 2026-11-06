@@ -1,3 +1,4 @@
+import { assertResearchReadyForAnalysis } from '../research-readiness.js';
 import { synthesizeCampaignStrategy } from './ai.js';
 import { applyClaimConsistency } from './claim-consistency.js';
 import {
@@ -350,6 +351,7 @@ function sendStage(onStage, index, detail = '') {
 }
 
 export async function generateCampaignStrategy(context = {}, configs = {}, options = {}) {
+  assertResearchReadyForAnalysis(context?.research);
   const now = options.now instanceof Date ? options.now : new Date();
   const onStage = options.onStage || (() => {});
   const prepared = prepareCampaignContext(context);

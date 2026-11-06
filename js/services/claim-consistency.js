@@ -422,6 +422,26 @@ export function applyOpportunityConsistency(radar, sources = [], now = new Date(
 // Applies the same floor to generated research. The summary is flag-only copy
 // checked against the full source set (its sentences carry no citations of
 // their own); signals are dated facts and stay untouched.
+// Summary sentences have no structured citations. For temporal checks, do not
+// borrow dates from the whole market source set. Require the same event kind
+// and at least two shared context words in the source title/date sentence.
+const EVENT_KIND = /\b(expo|conference|summit|festival|exhibition|launch|release|rollout)\b/gi;
+function eventMatchText(value) { return normalizeForMatch(value).toLowerCase().replace(/\btrade shows?\b/g, 'expo'); }
+const TEMPORAL_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'such', 'industry', 'upcoming', 'events', 'event', 'provide', 'opportunities', 'networking', 'will', 'past', 'now', 'beauty']);
+function temporalSummarySources(statement, sources) {
+  const kinds = (eventMatchText(statement).match(EVENT_KIND) || []);
+  if (!kinds.length) return [];
+  const words = new Set((eventMatchText(statement).match(/[a-z]{3,}/g) || []).filter(word => !TEMPORAL_STOP.has(word)));
+  return (sources || []).flatMap(source => {
+    const sentences = sentenceList(normalizeForMatch(source.snippet || '')).filter(sentence => {
+      const text = eventMatchText(`${source.title || ''} ${sentence}`);
+      const tokens = new Set(text.match(/[a-z]{3,}/g) || []);
+      return kinds.some(kind => tokens.has(kind)) && [...words].filter(word => tokens.has(word)).length >= 2;
+    });
+    return sentences.length ? [{ ...source, snippet: sentences.join(' ') }] : [];
+  });
+}
+
 export function applyResearchConsistency(research, sources = [], now = new Date(), context = {}) {
   if (!research || typeof research !== 'object') return research;
   const adjustments = [];
@@ -429,7 +449,8 @@ export function applyResearchConsistency(research, sources = [], now = new Date(
   if (typeof research.researchSummary === 'string' && research.researchSummary.trim()) {
     // A future forecast in one sentence must not excuse a past event in another.
     for (const statement of sentenceList(research.researchSummary)) {
-      reviewClaim('researchSummary', { statement, sourceIds: (sources || []).map((source) => source.id) }, sources, now, adjustments, flags, context);
+      const temporalSources = temporalSummarySources(statement, sources);
+      reviewClaim('researchSummary', { statement, sourceIds: temporalSources.map(source => source.id) }, temporalSources, now, adjustments, flags, context);
     }
     reviewAttribution('researchSummary', research.researchSummary, sources, now, flags);
   }
